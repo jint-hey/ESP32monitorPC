@@ -18,7 +18,7 @@
 - `oled_display.*`：SSD1306 I2C 驱动、显存和 6x8 ASCII 绘制。
 - `oled_ui.*`：CPU、MEM、GPU 同页显示，固定标签及百分比，GPU 名称在限定区域内往返滚动。
 
-协议与 `PC_Project/Project1/PacketProtocol.*` 保持一致：帧头 `AA 55`，多字节字段为小端，最大 payload 为 512 字节，CRC 不包含帧头。
+协议与 `PC_Project/PC_monitor/PacketProtocol.*` 保持一致：帧头 `AA 55`，多字节字段为小端，最大 payload 为 512 字节，CRC 不包含帧头。
 
 ## 编译和烧录
 

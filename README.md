@@ -14,7 +14,7 @@ PC 和 ESP32 共用同一套二进制串口协议。协议帧版本当前为 `0x
 ```text
 .
 ├─ PC_Project/
-│  └─ Project1/
+│  └─ PC_monitor/
 │     ├─ main.cpp                       Windows GUI 入口及 Debug 日志控制
 │     ├─ TrayApplication.*              托盘图标、串口选择和生命周期管理
 │     ├─ CpuMonitor.*                   CPU 使用率采集
@@ -318,7 +318,7 @@ Ping 和 Pong 的 payload 长度均为0。ESP32 收到 Ping 后立即发送 Pong
 
 ### PC
 
-使用 Visual Studio 打开 `PC_Project/Project1.slnx`，选择 `x64`：
+使用 Visual Studio 打开 `PC_Project/PC_monitor.slnx`，选择 `x64`：
 
 - `Debug`：显示控制台日志，适合联调。
 - `Release`：无控制台窗口，通过系统托盘运行。

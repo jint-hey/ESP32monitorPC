@@ -1,5 +1,6 @@
 #include "TrayApplication.h"
 
+#include "resource.h"
 #include "SerialPortEnumerator.h"
 
 #include <cwchar>
@@ -19,6 +20,26 @@ namespace
 
     constexpr const wchar_t* NO_SERIAL_PORT =
         L"(\u672a\u53d1\u73b0\u4e32\u53e3)";
+
+    HICON LoadApplicationIcon(
+        HINSTANCE instance
+    )
+    {
+        HICON icon = LoadIconW(
+            instance,
+            MAKEINTRESOURCEW(IDI_ICON1)
+        );
+
+        if (icon == nullptr)
+        {
+            icon = LoadIconW(
+                nullptr,
+                IDI_APPLICATION
+            );
+        }
+
+        return icon;
+    }
 }
 
 TrayApplication::TrayApplication(
@@ -183,7 +204,8 @@ bool TrayApplication::RegisterWindowClass()
     windowClass.cbSize = sizeof(windowClass);
     windowClass.lpfnWndProc = WindowProcedure;
     windowClass.hInstance = instance_;
-    windowClass.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
+    windowClass.hIcon = LoadApplicationIcon(instance_);
+    windowClass.hIconSm = windowClass.hIcon;
     windowClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     windowClass.lpszClassName = WINDOW_CLASS_NAME;
 
@@ -363,7 +385,7 @@ bool TrayApplication::AddTrayIcon()
     trayIconData_.uCallbackMessage =
         TRAY_CALLBACK_MESSAGE;
     trayIconData_.hIcon =
-        LoadIconW(nullptr, IDI_APPLICATION);
+        LoadApplicationIcon(instance_);
 
     wcscpy_s(
         trayIconData_.szTip,
