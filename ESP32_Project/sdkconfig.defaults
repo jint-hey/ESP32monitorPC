@@ -1,0 +1,7 @@
+# UART0 carries the binary PC protocol. Disable the application console so
+# ESP-IDF log/printf output cannot be mixed into that byte stream.
+CONFIG_ESP_CONSOLE_NONE=y
+CONFIG_LOG_DEFAULT_LEVEL_NONE=y
+
+# The application does not require external PSRAM.
+CONFIG_SPIRAM_IGNORE_NOTFOUND=y
