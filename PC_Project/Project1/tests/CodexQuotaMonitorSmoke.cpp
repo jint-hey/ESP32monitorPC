@@ -31,8 +31,8 @@ int main()
 
     std::cout << "status=" << static_cast<unsigned int>(snapshot.status)
               << " sequence=" << snapshot.sequence
-              << " primary_valid=" << snapshot.primary.valid
-              << " secondary_valid=" << snapshot.secondary.valid << '\n';
+              << " quota_valid=" << snapshot.quota.valid
+              << " window_minutes=" << snapshot.quota.windowDurationMinutes << '\n';
 
     if (snapshot.status == CodexQuotaStatus::AuthRequired)
     {
@@ -40,9 +40,9 @@ int main()
         return 0;
     }
 
-    if (snapshot.status != CodexQuotaStatus::Valid || !snapshot.primary.valid)
+    if (snapshot.status != CodexQuotaStatus::Valid || !snapshot.quota.valid)
     {
-        std::cerr << "A valid primary Codex quota window was not received.\n";
+        std::cerr << "A valid Codex quota window was not received.\n";
         return 1;
     }
 

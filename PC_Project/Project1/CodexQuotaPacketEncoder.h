@@ -9,8 +9,8 @@
 
 namespace CodexQuotaProtocol
 {
-    constexpr std::uint8_t PAYLOAD_VERSION = 1;
-    constexpr std::size_t PAYLOAD_SIZE = 43;
+    constexpr std::uint8_t PAYLOAD_VERSION = 2;
+    constexpr std::size_t PAYLOAD_SIZE = 27;
 }
 
 class CodexQuotaPacketEncoder
@@ -39,11 +39,6 @@ private:
         std::uint64_t value
     );
 
-    static void WriteWindow(
-        std::vector<std::uint8_t>& payload,
-        std::size_t offset,
-        const CodexQuotaWindow& window
-    );
 };
 
 #endif // CODEX_QUOTA_PACKET_ENCODER_H

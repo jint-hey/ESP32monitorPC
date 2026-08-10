@@ -801,27 +801,27 @@ void ConsoleLogger::LogCodexQuota(
         << L"  Collected: " << snapshot.collectedAtUnixSeconds << L" (Unix seconds)\n"
         << L"  Limited : " << (snapshot.rateLimitReached ? L"YES" : L"NO") << L"\n";
 
-    const auto appendWindow = [&stream](
-        const wchar_t* name,
-        const CodexQuotaWindow& window
-    )
+    stream
+        << L"  Bucket  : "
+        << std::wstring(snapshot.bucketId.begin(), snapshot.bucketId.end())
+        << L"\n"
+        << L"  Source  : "
+        << std::wstring(snapshot.windowSource.begin(), snapshot.windowSource.end())
+        << L"\n"
+        << L"  Weekly  : ";
+
+    if (!snapshot.quota.valid)
     {
-        stream << L"  " << name << L" : ";
-        if (!window.valid)
-        {
-            stream << L"Unavailable\n";
-            return;
-        }
-
+        stream << L"Unavailable\n";
+    }
+    else
+    {
         stream
-            << L"used=" << window.usedPercentX100 / 100.0 << L"%, "
-            << L"remaining=" << window.remainingPercentX100 / 100.0 << L"%, "
-            << L"window=" << window.windowDurationMinutes << L" min, "
-            << L"resetsAt=" << window.resetsAtUnixSeconds << L"\n";
-    };
-
-    appendWindow(L"Primary  ", snapshot.primary);
-    appendWindow(L"Secondary", snapshot.secondary);
+            << L"used=" << snapshot.quota.usedPercentX100 / 100.0 << L"%, "
+            << L"remaining=" << snapshot.quota.remainingPercentX100 / 100.0 << L"%, "
+            << L"window=" << snapshot.quota.windowDurationMinutes << L" min, "
+            << L"resetsAt=" << snapshot.quota.resetsAtUnixSeconds << L"\n";
+    }
 
     std::lock_guard<std::mutex> lock(outputMutex_);
     std::wcout << stream.str();

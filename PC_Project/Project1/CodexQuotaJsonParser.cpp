@@ -24,7 +24,7 @@ namespace
     bool TryReadUnsigned(
         const Json& object,
         const char* name,
-        std::uint64_t maximum,
+        const std::uint64_t maximum,
         std::uint64_t& value
     )
     {
@@ -68,17 +68,13 @@ namespace
         return true;
     }
 
-    bool TryParseWindow(
-        const Json& value,
-        CodexQuotaWindow& window
-    )
+    bool TryParseWindow(const Json& value, CodexQuotaWindow& window)
     {
         if (value.is_null())
         {
             window = {};
             return true;
         }
-
         if (!value.is_object())
         {
             return false;
@@ -91,14 +87,10 @@ namespace
         }
 
         const double usedPercent = usedIterator->get<double>();
-        if (!std::isfinite(usedPercent))
-        {
-            return false;
-        }
-
         std::uint64_t duration = 0;
         std::uint64_t resetsAt = 0;
-        if (!TryReadUnsigned(
+        if (!std::isfinite(usedPercent) ||
+            !TryReadUnsigned(
                 value,
                 "windowDurationMins",
                 std::numeric_limits<std::uint32_t>::max(),
@@ -115,7 +107,6 @@ namespace
         const long long scaled = std::llround(
             std::clamp(usedPercent, 0.0, 100.0) * 100.0
         );
-
         window.valid = true;
         window.usedPercentX100 = static_cast<std::uint16_t>(scaled);
         window.remainingPercentX100 = static_cast<std::uint16_t>(10000 - scaled);
@@ -124,49 +115,119 @@ namespace
         return true;
     }
 
-    CodexAppServerMessage ParseQuotaObject(
-        const Json& rateLimits,
-        const bool allowPartial
+    bool HasCodexLimitId(const Json& bucket, const bool allowMissing)
+    {
+        const auto limitId = bucket.find("limitId");
+        if (limitId == bucket.end())
+        {
+            return allowMissing;
+        }
+        return limitId->is_string() && limitId->get<std::string>() == "codex";
+    }
+
+    CodexAppServerMessage ParseBucket(
+        const Json& bucket,
+        const bool partialUpdate
     )
     {
         CodexAppServerMessage message;
         message.type = CodexAppServerMessageType::Error;
+        message.partialUpdate = partialUpdate;
 
-        if (!rateLimits.is_object())
+        if (!bucket.is_object())
         {
-            message.error = "rateLimits is not an object";
+            message.error = "Codex rate-limit bucket is not an object";
             return message;
         }
 
-        const auto primary = rateLimits.find("primary");
-        const auto secondary = rateLimits.find("secondary");
-        message.primaryPresent = primary != rateLimits.end();
-        message.secondaryPresent = secondary != rateLimits.end();
-        if (!allowPartial && (!message.primaryPresent || !message.secondaryPresent))
+        const auto primary = bucket.find("primary");
+        const auto secondary = bucket.find("secondary");
+        CodexQuotaWindow primaryWindow;
+        CodexQuotaWindow secondaryWindow;
+        if ((primary != bucket.end() && !TryParseWindow(*primary, primaryWindow)) ||
+            (secondary != bucket.end() && !TryParseWindow(*secondary, secondaryWindow)))
         {
-            message.error = "rateLimits window fields are missing";
+            message.error = "Codex rate-limit window is invalid";
             return message;
         }
 
-        if ((message.primaryPresent && !TryParseWindow(*primary, message.quota.primary)) ||
-            (message.secondaryPresent && !TryParseWindow(*secondary, message.quota.secondary)) ||
-            (!allowPartial &&
-             !message.quota.primary.valid &&
-             !message.quota.secondary.valid))
+        if (primaryWindow.valid || secondaryWindow.valid)
         {
-            message.error = "rateLimits window fields are invalid";
+            if (secondaryWindow.valid &&
+                (!primaryWindow.valid ||
+                 secondaryWindow.windowDurationMinutes > primaryWindow.windowDurationMinutes))
+            {
+                message.quota.quota = secondaryWindow;
+                message.quota.windowSource = "secondary";
+            }
+            else
+            {
+                message.quota.quota = primaryWindow;
+                message.quota.windowSource = "primary";
+            }
+            message.quotaPresent = true;
+        }
+        else if (!partialUpdate)
+        {
+            message.error = "Codex rate-limit bucket has no usable window";
             return message;
         }
 
-        const auto reached = rateLimits.find("rateLimitReachedType");
-        message.rateLimitReachedPresent = reached != rateLimits.end();
+        const auto reached = bucket.find("rateLimitReachedType");
+        message.rateLimitReachedPresent = reached != bucket.end();
         message.quota.rateLimitReached =
             message.rateLimitReachedPresent && !reached->is_null();
         message.quota.status = CodexQuotaStatus::Valid;
         message.quota.collectedAtUnixSeconds = CurrentUnixSeconds();
+        message.quota.bucketId = "codex";
         message.type = CodexAppServerMessageType::Quota;
         message.error.clear();
         return message;
+    }
+
+    CodexAppServerMessage ParseRateLimitsResponse(const Json& result)
+    {
+        const auto byId = result.find("rateLimitsByLimitId");
+        if (byId != result.end() && !byId->is_null())
+        {
+            if (!byId->is_object())
+            {
+                CodexAppServerMessage error;
+                error.type = CodexAppServerMessageType::Error;
+                error.error = "rateLimitsByLimitId is not an object";
+                return error;
+            }
+
+            const auto exact = byId->find("codex");
+            if (exact != byId->end())
+            {
+                return ParseBucket(*exact, false);
+            }
+
+            for (auto iterator = byId->begin(); iterator != byId->end(); ++iterator)
+            {
+                if (iterator->is_object() && HasCodexLimitId(*iterator, false))
+                {
+                    return ParseBucket(*iterator, false);
+                }
+            }
+
+            CodexAppServerMessage error;
+            error.type = CodexAppServerMessageType::Error;
+            error.error = "rateLimitsByLimitId does not contain the codex bucket";
+            return error;
+        }
+
+        const auto limits = result.find("rateLimits");
+        if (limits == result.end() || !limits->is_object() ||
+            !HasCodexLimitId(*limits, true))
+        {
+            CodexAppServerMessage error;
+            error.type = CodexAppServerMessageType::Error;
+            error.error = "Codex rateLimits response data is missing";
+            return error;
+        }
+        return ParseBucket(*limits, false);
     }
 
     bool IsAuthenticatedAccountType(const std::string& type)
@@ -205,7 +266,6 @@ CodexAppServerMessage CodexQuotaJsonParser::ParseLine(
 )
 {
     CodexAppServerMessage parsed;
-
     if (line.size() > 1024U * 1024U)
     {
         parsed.type = CodexAppServerMessageType::Error;
@@ -258,15 +318,18 @@ CodexAppServerMessage CodexQuotaJsonParser::ParseLine(
                 parsed.error = "rateLimits notification params are missing";
                 return parsed;
             }
-
             const auto limits = params->find("rateLimits");
-            if (limits == params->end())
+            if (limits == params->end() || !limits->is_object())
             {
                 parsed.type = CodexAppServerMessageType::Error;
                 parsed.error = "rateLimits notification data is missing";
                 return parsed;
             }
-            return ParseQuotaObject(*limits, true);
+            if (!HasCodexLimitId(*limits, true))
+            {
+                return parsed;
+            }
+            return ParseBucket(*limits, true);
         }
 
         const auto id = message.find("id");
@@ -301,7 +364,6 @@ CodexAppServerMessage CodexQuotaJsonParser::ParseLine(
             parsed.type = CodexAppServerMessageType::Initialized;
             return parsed;
         }
-
         if (requestId == ACCOUNT_REQUEST_ID)
         {
             const auto account = result->find("account");
@@ -310,7 +372,6 @@ CodexAppServerMessage CodexQuotaJsonParser::ParseLine(
                 parsed.type = CodexAppServerMessageType::AuthRequired;
                 return parsed;
             }
-
             const auto type = account->find("type");
             parsed.type =
                 type != account->end() && type->is_string() &&
@@ -319,17 +380,9 @@ CodexAppServerMessage CodexQuotaJsonParser::ParseLine(
                 : CodexAppServerMessageType::AuthRequired;
             return parsed;
         }
-
         if (requestId == RATE_LIMITS_REQUEST_ID)
         {
-            const auto limits = result->find("rateLimits");
-            if (limits == result->end())
-            {
-                parsed.type = CodexAppServerMessageType::Error;
-                parsed.error = "rateLimits response data is missing";
-                return parsed;
-            }
-            return ParseQuotaObject(*limits, false);
+            return ParseRateLimitsResponse(*result);
         }
     }
     catch (const std::exception& exception)
@@ -337,6 +390,5 @@ CodexAppServerMessage CodexQuotaJsonParser::ParseLine(
         parsed.type = CodexAppServerMessageType::Error;
         parsed.error = exception.what();
     }
-
     return parsed;
 }

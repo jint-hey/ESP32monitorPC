@@ -2,6 +2,7 @@
 #define CODEX_QUOTA_H
 
 #include <cstdint>
+#include <string>
 
 enum class CodexQuotaStatus : std::uint8_t
 {
@@ -25,8 +26,9 @@ struct CodexQuotaSnapshot
     CodexQuotaStatus status = CodexQuotaStatus::Unavailable;
     bool rateLimitReached = false;
     std::uint64_t collectedAtUnixSeconds = 0;
-    CodexQuotaWindow primary;
-    CodexQuotaWindow secondary;
+    CodexQuotaWindow quota;
+    std::string bucketId;
+    std::string windowSource;
     std::uint64_t sequence = 0;
 };
 

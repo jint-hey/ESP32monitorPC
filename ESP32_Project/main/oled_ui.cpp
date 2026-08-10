@@ -7,6 +7,7 @@
 
 #include "app_config.hpp"
 #include "esp_timer.h"
+#include "unix_time.hpp"
 
 namespace
 {
@@ -107,7 +108,7 @@ void OledUi::TaskLoop()
 
 void OledUi::DrawCodexPage(const CodexQuotaSnapshot& snapshot)
 {
-    display_.DrawText(31, 0, "CODEX QUOTA");
+    display_.DrawText(28, 0, "CODEX WEEKLY");
 
     if (!snapshot.hasPacket)
     {
@@ -134,56 +135,60 @@ void OledUi::DrawCodexPage(const CodexQuotaSnapshot& snapshot)
         return;
     }
 
-    DrawCodexWindow(10, 19, 'P', snapshot.primary);
-    DrawCodexWindow(31, 40, 'S', snapshot.secondary);
-
-    if (snapshot.rateLimitReached)
+    if (!snapshot.quota.valid)
     {
-        display_.DrawText(22, 54, "RATE LIMITED");
-    }
-    else
-    {
-        std::array<char, 22> footer{};
-        std::snprintf(footer.data(), footer.size(), "UPDATE %lu",
-                      static_cast<unsigned long>(snapshot.updateCount));
-        display_.DrawText(37, 54, footer.data());
-    }
-}
-
-void OledUi::DrawCodexWindow(const int textY,
-                             const int barY,
-                             const char label,
-                             const CodexQuotaWindow& window)
-{
-    // The longest formatted line needs 25 visible characters plus '\0'.
-    // DrawTextClipped still limits rendering to the 126-pixel viewport.
-    std::array<char, 32> text{};
-    if (!window.valid)
-    {
-        std::snprintf(text.data(), text.size(), "%c WINDOW N/A", label);
-        display_.DrawText(1, textY, text.data());
-        DrawProgressBar(1, barY, 126, 7, 0);
+        display_.DrawText(22, 24, "QUOTA MISSING");
         return;
     }
 
+    std::array<char, 22> text{};
+    std::snprintf(text.data(), text.size(), "LEFT %u.%u%%",
+                  snapshot.quota.remainingPercentX100 / 100U,
+                  (snapshot.quota.remainingPercentX100 % 100U) / 10U);
+    display_.DrawText(1, 11, text.data());
+    DrawProgressBar(1, 21, 126, 9, snapshot.quota.remainingPercentX100);
+
+    std::snprintf(text.data(), text.size(), "USED %u.%u%%",
+                  snapshot.quota.usedPercentX100 / 100U,
+                  (snapshot.quota.usedPercentX100 % 100U) / 10U);
+    display_.DrawText(1, 33, text.data());
+
     std::array<char, 10> duration{};
-    FormatWindowDuration(window.windowDurationMinutes, duration.data(), duration.size());
-    std::snprintf(text.data(), text.size(), "%c%s U%u.%u R%u.%u",
-                  label,
-                  duration.data(),
-                  window.usedPercentX100 / 100U,
-                  (window.usedPercentX100 % 100U) / 10U,
-                  window.remainingPercentX100 / 100U,
-                  (window.remainingPercentX100 % 100U) / 10U);
-    display_.DrawTextClipped(1, textY, text.data(), 1, 126);
-    DrawProgressBar(1, barY, 126, 7, window.usedPercentX100);
+    FormatWindowDuration(snapshot.quota.windowDurationMinutes,
+                         duration.data(), duration.size());
+    if (snapshot.rateLimitReached)
+    {
+        std::snprintf(text.data(), text.size(), "LIMITED %s", duration.data());
+    }
+    else
+    {
+        std::snprintf(text.data(), text.size(), "WINDOW %s", duration.data());
+    }
+    display_.DrawText(1, 43, text.data());
+
+    if (snapshot.quota.resetsAtUnixSeconds == 0)
+    {
+        display_.DrawText(10, 54, "RST N/A");
+        return;
+    }
+
+    const LocalDateTime reset = UnixToLocalDateTime(
+        snapshot.quota.resetsAtUnixSeconds,
+        app_config::CODEX_TIMEZONE_OFFSET_MINUTES);
+    std::snprintf(text.data(), text.size(), "RST %02u/%02u/%02u %02u:%02u",
+                  static_cast<unsigned int>(reset.year % 100),
+                  reset.month,
+                  reset.day,
+                  reset.hour,
+                  reset.minute);
+    display_.DrawText(10, 54, text.data());
 }
 
 void OledUi::DrawProgressBar(const int x,
                              const int y,
                              const int width,
                              const int height,
-                             const uint16_t usedX100)
+                             const uint16_t percentageX100)
 {
     for (int pixelX = x; pixelX < x + width; ++pixelX)
     {
@@ -197,7 +202,8 @@ void OledUi::DrawProgressBar(const int x,
     }
 
     const int innerWidth = width - 2;
-    const int filledWidth = innerWidth * std::min<uint16_t>(usedX100, 10000U) / 10000;
+    const int filledWidth =
+        innerWidth * std::min<uint16_t>(percentageX100, 10000U) / 10000;
     for (int pixelX = 0; pixelX < filledWidth; ++pixelX)
     {
         for (int pixelY = 1; pixelY < height - 1; ++pixelY)

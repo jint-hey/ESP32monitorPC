@@ -635,19 +635,27 @@ bool CodexQuotaMonitor::HandleJsonLine(
     {
         CodexQuotaSnapshot quota = message.quota;
         const CodexQuotaSnapshot previous = GetSnapshot();
-        if (!message.primaryPresent)
+        if (!message.quotaPresent)
         {
-            quota.primary = previous.primary;
+            quota.quota = previous.quota;
+            quota.windowSource = previous.windowSource;
         }
-        if (!message.secondaryPresent)
+        else if (message.partialUpdate &&
+                 previous.quota.valid &&
+                 quota.windowSource != previous.windowSource &&
+                 quota.quota.windowDurationMinutes <
+                     previous.quota.windowDurationMinutes)
         {
-            quota.secondary = previous.secondary;
+            // Notifications can update only the short window. Keep the
+            // already-selected longer (weekly) window in that case.
+            quota.quota = previous.quota;
+            quota.windowSource = previous.windowSource;
         }
         if (!message.rateLimitReachedPresent)
         {
             quota.rateLimitReached = previous.rateLimitReached;
         }
-        if (!quota.primary.valid && !quota.secondary.valid)
+        if (!quota.quota.valid)
         {
             LogWarning(L"Codex quota update did not contain a usable window.");
             return true;

@@ -20,9 +20,9 @@ struct CodexAppServerMessage
 {
     CodexAppServerMessageType type = CodexAppServerMessageType::Ignored;
     CodexQuotaSnapshot quota;
-    bool primaryPresent = false;
-    bool secondaryPresent = false;
+    bool quotaPresent = false;
     bool rateLimitReachedPresent = false;
+    bool partialUpdate = false;
     std::string error;
 };
 

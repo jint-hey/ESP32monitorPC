@@ -21,4 +21,7 @@ namespace app_config
 
     // Hardware monitor and Codex quota page rotation interval.
     inline constexpr uint32_t OLED_PAGE_SWITCH_SECONDS = 5;
+
+    // Fixed timezone used to render the Codex reset timestamp (UTC+8).
+    inline constexpr int32_t CODEX_TIMEZONE_OFFSET_MINUTES = 480;
 }

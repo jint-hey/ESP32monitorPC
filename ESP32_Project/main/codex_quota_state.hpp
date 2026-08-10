@@ -29,8 +29,7 @@ struct CodexQuotaSnapshot
     CodexQuotaStatus status = CodexQuotaStatus::Unavailable;
     bool rateLimitReached = false;
     uint64_t collectedAtUnixSeconds = 0;
-    CodexQuotaWindow primary;
-    CodexQuotaWindow secondary;
+    CodexQuotaWindow quota;
     uint32_t updateCount = 0;
     uint16_t lastPacketSequence = 0;
     bool hasPacket = false;

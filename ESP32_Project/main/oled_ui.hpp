@@ -28,11 +28,11 @@ private:
     void DrawWaitingScreen();
     void DrawDashboard(const HardwareSnapshot& snapshot, uint64_t nowMs);
     void DrawCodexPage(const CodexQuotaSnapshot& snapshot);
-    void DrawCodexWindow(int textY,
-                         int barY,
-                         char label,
-                         const CodexQuotaWindow& window);
-    void DrawProgressBar(int x, int y, int width, int height, uint16_t usedX100);
+    void DrawProgressBar(int x,
+                         int y,
+                         int width,
+                         int height,
+                         uint16_t percentageX100);
     void DrawUsageRow(int y,
                       std::string_view label,
                       std::string_view name,

@@ -2,8 +2,8 @@
 
 namespace
 {
-constexpr uint8_t PAYLOAD_SCHEMA_VERSION = 1;
-constexpr std::size_t PAYLOAD_SIZE = 43;
+constexpr uint8_t PAYLOAD_SCHEMA_VERSION = 2;
+constexpr std::size_t PAYLOAD_SIZE = 27;
 
 uint16_t ReadUInt16Le(const uint8_t* data)
 {
@@ -37,21 +37,6 @@ uint16_t ClampPercentage(const uint16_t value)
     return value > 10000U ? 10000U : value;
 }
 
-CodexQuotaWindow ReadWindow(const uint8_t* data, const bool valid)
-{
-    CodexQuotaWindow window;
-    window.valid = valid;
-    if (!valid)
-    {
-        return window;
-    }
-
-    window.usedPercentX100 = ClampPercentage(ReadUInt16Le(data));
-    window.remainingPercentX100 = ClampPercentage(ReadUInt16Le(data + 2));
-    window.windowDurationMinutes = ReadUInt32Le(data + 4);
-    window.resetsAtUnixSeconds = ReadUInt64Le(data + 8);
-    return window;
-}
 }
 
 CodexQuotaStateStore::CodexQuotaStateStore()
@@ -73,10 +58,20 @@ bool CodexQuotaStateStore::ApplyPacket(const pc_protocol::Packet& packet)
     const uint8_t flags = packet.payload[2];
     CodexQuotaSnapshot next;
     next.status = static_cast<CodexQuotaStatus>(packet.payload[1]);
-    next.rateLimitReached = (flags & 0x04U) != 0;
+    next.rateLimitReached = (flags & 0x02U) != 0;
     next.collectedAtUnixSeconds = ReadUInt64Le(packet.payload.data() + 3);
-    next.primary = ReadWindow(packet.payload.data() + 11, (flags & 0x01U) != 0);
-    next.secondary = ReadWindow(packet.payload.data() + 27, (flags & 0x02U) != 0);
+    next.quota.valid = (flags & 0x01U) != 0;
+    if (next.quota.valid)
+    {
+        next.quota.usedPercentX100 =
+            ClampPercentage(ReadUInt16Le(packet.payload.data() + 11));
+        next.quota.remainingPercentX100 =
+            ClampPercentage(ReadUInt16Le(packet.payload.data() + 13));
+        next.quota.windowDurationMinutes =
+            ReadUInt32Le(packet.payload.data() + 15);
+        next.quota.resetsAtUnixSeconds =
+            ReadUInt64Le(packet.payload.data() + 19);
+    }
     next.lastPacketSequence = packet.sequence;
     next.hasPacket = true;
 
