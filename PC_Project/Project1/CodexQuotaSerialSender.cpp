@@ -123,26 +123,15 @@ void CodexQuotaSerialSender::WorkerLoop()
 
                     if (logger != nullptr)
                     {
-                        std::wostringstream message;
-                        message << L"Codex quota packet queued. status="
-                                << static_cast<unsigned int>(snapshot.status);
-                        if (snapshot.primary.valid)
-                        {
-                            message << L", primary remaining="
-                                    << snapshot.primary.remainingPercentX100 / 100.0
-                                    << L"%";
-                        }
-                        if (snapshot.secondary.valid)
-                        {
-                            message << L", secondary remaining="
-                                    << snapshot.secondary.remainingPercentX100 / 100.0
-                                    << L"%";
-                        }
-                        logger->Info(message.str());
+                        logger->LogCodexSerial(snapshot, true, forceResend);
                     }
                 }
                 else
                 {
+                    if (logger != nullptr)
+                    {
+                        logger->LogCodexSerial(snapshot, false, forceResend);
+                    }
                     lock.lock();
                     forceResend_ = true;
                     lock.unlock();

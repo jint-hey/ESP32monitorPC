@@ -352,6 +352,10 @@ bool CodexQuotaMonitor::RunAppServerSession()
     {
         return false;
     }
+    if (logger_ != nullptr)
+    {
+        logger_->LogCodexQuery(L"initialize", L"App Server startup");
+    }
 
     bool authenticated = false;
     bool receivedQuota = false;
@@ -397,6 +401,13 @@ bool CodexQuotaMonitor::RunAppServerSession()
             {
                 return receivedQuota;
             }
+            if (logger_ != nullptr)
+            {
+                logger_->LogCodexQuery(
+                    L"account/rateLimits/read",
+                    L"Initial quota query"
+                );
+            }
             nextRefresh = std::chrono::steady_clock::now() + REFRESH_INTERVAL;
         }
 
@@ -413,6 +424,13 @@ bool CodexQuotaMonitor::RunAppServerSession()
             {
                 return receivedQuota;
             }
+            if (logger_ != nullptr)
+            {
+                logger_->LogCodexQuery(
+                    L"account/rateLimits/read",
+                    L"60-second periodic refresh"
+                );
+            }
             nextRefresh = now + REFRESH_INTERVAL;
         }
 
@@ -421,6 +439,13 @@ bool CodexQuotaMonitor::RunAppServerSession()
             if (!WriteJsonLine(ACCOUNT_REQUEST))
             {
                 return receivedQuota;
+            }
+            if (logger_ != nullptr)
+            {
+                logger_->LogCodexQuery(
+                    L"account/read",
+                    L"60-second authentication recheck"
+                );
             }
             nextAccountCheck = now + REFRESH_INTERVAL;
         }
@@ -581,16 +606,28 @@ bool CodexQuotaMonitor::HandleJsonLine(
             return false;
         }
         initialized = true;
+        if (logger_ != nullptr)
+        {
+            logger_->LogCodexQuery(L"account/read", L"Initial authentication check");
+        }
         return true;
 
     case CodexAppServerMessageType::AccountAuthenticated:
         authenticated = true;
+        if (logger_ != nullptr)
+        {
+            logger_->LogCodexAccount(true);
+        }
         LogInfo(L"Codex ChatGPT authentication is available.");
         return true;
 
     case CodexAppServerMessageType::AuthRequired:
         authenticated = false;
         PublishStatus(CodexQuotaStatus::AuthRequired);
+        if (logger_ != nullptr)
+        {
+            logger_->LogCodexAccount(false);
+        }
         LogWarning(L"Codex ChatGPT login is required for quota monitoring.");
         return true;
 
@@ -616,6 +653,10 @@ bool CodexQuotaMonitor::HandleJsonLine(
             return true;
         }
         PublishSnapshot(quota);
+        if (logger_ != nullptr)
+        {
+            logger_->LogCodexQuota(GetSnapshot());
+        }
         receivedQuota = true;
         LogInfo(L"Codex quota snapshot refreshed.");
         return true;

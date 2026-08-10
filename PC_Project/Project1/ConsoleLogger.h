@@ -3,6 +3,7 @@
 
 #include "HardwareMonitor.h"
 #include "PacketProtocol.h"
+#include "CodexQuota.h"
 
 #include <atomic>
 #include <chrono>
@@ -151,6 +152,30 @@ public:
 
     void LogRxPacket(
         const Packet& packet
+    );
+
+
+    // ========================================================================
+    // Codex quota
+    // ========================================================================
+
+    void LogCodexQuery(
+        const std::wstring& method,
+        const std::wstring& reason
+    );
+
+    void LogCodexAccount(
+        bool authenticated
+    );
+
+    void LogCodexQuota(
+        const CodexQuotaSnapshot& snapshot
+    );
+
+    void LogCodexSerial(
+        const CodexQuotaSnapshot& snapshot,
+        bool success,
+        bool forced
     );
 
 
