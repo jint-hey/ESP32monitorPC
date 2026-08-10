@@ -9,6 +9,51 @@
 
 PC 和 ESP32 共用同一套二进制串口协议。协议帧版本当前为 `0x01`，Codex payload schema 当前为 `2`，不兼容旧版 Codex schema `1`。
 
+## 快速使用
+
+### 运行 PC 上位机
+
+仓库中已经提供编译后的程序，优先运行 Release 版本：
+
+```text
+PC_Project/x64/Release/PC_monitor.exe
+```
+
+需要查看调试日志时运行：
+
+```text
+PC_Project/x64/Debug/PC_monitor.exe
+```
+
+操作步骤：
+
+1. 使用 Type-C 数据线连接 ESP32-S3 与 PC。
+2. 双击 `PC_monitor.exe`。程序不会显示主窗口，而是在 Win11 通知区域运行；图标被折叠时可点击任务栏右侧的 `^` 查找。
+3. 右键托盘图标，将鼠标移到“串口选择”，选择 ESP32 对应的 COM 端口（如果存在多个，可以挨个试）。
+4. 不再使用时，通过托盘菜单的“退出”关闭程序并释放串口。
+
+Release 用于日常运行；Debug 会额外打开日志终端。Codex CLI 不可用或未登录时，CPU、内存和 GPU 监控仍能继续工作。
+
+### 使用 Flash Download Tool 烧录 ESP32 固件
+
+仓库已保留烧录所需固件，无需安装 ESP-IDF 或自行构建。进入 `ESP32_Project/build` 即可找到文件；烧录地址也记录在同目录的 `flasher_args.json` 和 `flash_args` 中：
+
+| 下载地址 | 仓库中的固件文件 |
+|---:|---|
+| `0x0` | `ESP32_Project/build/bootloader/bootloader.bin` |
+| `0x8000` | `ESP32_Project/build/partition_table/partition-table.bin` |
+| `0x10000` | `ESP32_Project/build/pc_hardware_display.bin` |
+
+烧录步骤：
+
+1. 从[乐鑫官方工具页面](https://www.espressif.com/en/tools-type/flash-download-tools)下载并启动 Flash Download Tool。
+2. 启动界面选择 `ChipType: ESP32-S3`、`WorkMode: Develop`、`LoadMode: UART`。
+3. 在下载列表添加上表三个 `.bin` 文件，勾选每一行并填写对应地址。
+4. 选择 `SPI SPEED: 80MHz`、`SPI MODE: DIO`、`FLASH SIZE: 2MB`。
+5. 先退出占用串口的 `PC_monitor.exe` 和 `idf.py monitor`，再选择 ESP32 对应的 COM 端口和下载波特率。
+6. 点击 `START`。如果无法自动进入下载模式，按住开发板 `BOOT`，短按 `RESET`，松开 `RESET` 后再松开 `BOOT`，然后重新开始。
+7. 下载完成后复位开发板，再启动 PC 上位机并选择该串口。
+
 ## 目录结构
 
 ```text
@@ -57,6 +102,23 @@ PC 程序是 Windows GUI 托盘程序：
 - 右键图标可以选择当前串口或退出程序。
 - Debug 配置自动创建日志终端；Release 配置不创建控制台窗口。
 - 硬件采集、Codex 查询和串口发送使用独立线程，某一数据源失败不会阻塞其他数据源。
+
+### PC 线程架构
+
+PC 端使用 Win32 消息循环作为主线程，并将阻塞操作和周期任务拆分为后台 `std::thread`：
+
+| 线程 | 创建条件 | 主要职责 |
+|---|---|---|
+| 主线程 | 程序启动 | Win32 消息循环、托盘菜单、串口选择、状态通知和退出流程 |
+| `HardwareMonitor` | 程序启动 | 默认每1秒采集 CPU、内存和 GPU，更新线程安全硬件快照 |
+| `ConsoleLogger` 硬件日志线程 | 仅 Debug 日志开启时 | 默认每1秒复制硬件快照并打印，不参与采集和串口发送 |
+| `CodexQuotaMonitor` | 程序启动 | 管理隐藏的 `codex app-server` 子进程、JSONL 收发、60秒查询及异常退避重启 |
+| `CodexQuotaSerialSender` | 程序启动 | 监听额度快照序号，额度变化或串口重连时异步发送 `0x03` 数据包 |
+| `HardwareSerialSender` | 串口连接成功 | 每秒发送 `HardwareUsage`，连接后及每10秒发送 `HardwareInfo` |
+| `SerialCommunicator::TxWorker` | 串口连接成功 | 从有界发送队列取帧并执行串口写入 |
+| `SerialCommunicator::RxWorker` | 串口连接成功 | 串口读取、通用帧解码，并处理 Ping/Pong 等返回数据 |
+
+硬件和 Codex 数据通过“后台生产快照、发送线程复制快照”的方式解耦。共享快照和生命周期状态由 `std::mutex`、`std::atomic` 保护，发送队列及停止/重连事件通过 `std::condition_variable` 唤醒。退出时由 `TrayApplication` 依次停止发送、采集和通信线程并执行 `join()`，避免线程继续访问已销毁对象。
 
 ### 硬件数据流
 
@@ -117,6 +179,17 @@ Codex 查询使用官方 `account/rateLimits/read`：优先读取 `rateLimitsByL
 | Codex时区 | UTC+8，即 `480` 分钟 |
 
 UART0 同时连接 PC 二进制协议，因此正常运行时不要开启 `idf.py monitor`，并保持 ESP-IDF 控制台日志关闭，避免日志文本混入协议字节流。Boot ROM 的启动文本不包含合法完整数据帧，解析器会继续搜索 `AA 55` 帧头。
+
+### ESP32 FreeRTOS 任务架构
+
+`app_main` 初始化状态仓库和 OLED 后创建两个长期运行的 FreeRTOS 任务，本身不承担循环处理：
+
+| 任务 | 栈大小 | 优先级 | 周期/等待 | 主要职责 |
+|---|---:|---:|---|---|
+| `pc_uart_rx` | 4096 bytes | 10 | UART 最多阻塞20ms | 每次最多读取256字节，写入2048字节环形缓冲区，解析完整帧、更新状态，并回复 Pong |
+| `oled_ui` | 4096 bytes | 5 | 100ms | 复制最新硬件/Codex 快照、绘制 SSD1306 framebuffer、刷新 OLED，并按配置切换页面 |
+
+UART 接收任务的优先级高于 OLED 任务，屏幕刷新不会阻塞串口字节流接收。`HardwareStateStore` 和 `CodexQuotaStateStore` 使用 FreeRTOS mutex 保护共享快照：UART 任务只在更新快照时短暂持锁，OLED 任务复制完成后再进行格式化和 I2C 绘制，从而缩短临界区并避免显示到半包数据。
 
 ### 接收和显示流程
 
@@ -314,9 +387,7 @@ Ping 和 Pong 的 payload 长度均为0。ESP32 收到 Ping 后立即发送 Pong
 
 这种“错误时只丢弃一个字节再重新搜索帧头”的策略，可以在启动日志、半包、粘包、丢字节或CRC错误后自动恢复同步。
 
-## 编译与运行
-
-### PC
+## PC 工程编译
 
 使用 Visual Studio 打开 `PC_Project/PC_monitor.slnx`，选择 `x64`：
 
@@ -328,14 +399,3 @@ PC 需要安装并登录支持 `account/rateLimits/read` 的 Codex CLI。可执�
 ```powershell
 $env:CODEX_EXE_PATH = "C:\path\to\codex.exe"
 ```
-
-### ESP32
-
-```powershell
-cd ESP32_Project
-idf.py set-target esp32s3
-idf.py build
-idf.py -p COM4 flash
-```
-
-烧录前先退出占用串口的 PC 程序；烧录完成后关闭 `idf.py monitor`，再启动 PC 上位机并选择对应串口。

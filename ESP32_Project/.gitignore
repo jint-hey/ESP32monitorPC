@@ -76,3 +76,17 @@ Desktop.ini
 *.workspace # General workspace files, can be from various tools
 *.suo       # Visual Studio Solution User Options
 *.sln.docstates # Visual Studio
+
+# Keep the minimal prebuilt firmware set required by Flash Download Tool.
+# All other ESP-IDF build artifacts remain ignored.
+!build/
+build/*
+!build/bootloader/
+build/bootloader/*
+!build/bootloader/bootloader.bin
+!build/partition_table/
+build/partition_table/*
+!build/partition_table/partition-table.bin
+!build/pc_hardware_display.bin
+!build/flasher_args.json
+!build/flash_args
