@@ -474,6 +474,11 @@ ConsoleLogger::PacketTypeName(
         return L"HardwareUsage";
 
 
+    case PacketType::CodexQuota:
+
+        return L"CodexQuota";
+
+
     case PacketType::Ping:
 
         return L"Ping";

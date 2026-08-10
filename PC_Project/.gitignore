@@ -1,8 +1,13 @@
 .vs
 Project1/x64
+Project1/Project1/
+Project1/tests/CodexQuo.*/
+Project1/tests/CodexQuotaTests/
+Project1/tests/x64/
 Project1.slnx
 Project1/Project1.vcxproj
 Project1/Project1.vcxproj.filters
 Project1/Project1.vcxproj.user
 x64/Debug/Project1.pdb
 x64/Release/Project1.pdb
+PC_Project/Project1/tests

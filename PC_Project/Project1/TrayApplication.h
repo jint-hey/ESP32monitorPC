@@ -8,6 +8,8 @@
 #include <Windows.h>
 #include <shellapi.h>
 
+#include "CodexQuotaMonitor.h"
+#include "CodexQuotaSerialSender.h"
 #include "ConsoleLogger.h"
 #include "HardwareMonitor.h"
 #include "HardwareSerialSender.h"
@@ -39,6 +41,7 @@ public:
 private:
     static constexpr UINT TRAY_ICON_ID = 1;
     static constexpr UINT TRAY_CALLBACK_MESSAGE = WM_APP + 1;
+    static constexpr UINT CODEX_STATUS_MESSAGE = WM_APP + 2;
     static constexpr UINT MENU_EXIT_ID = 100;
     static constexpr UINT MENU_PORT_BASE_ID = 1000;
     static constexpr DWORD SERIAL_BAUD_RATE = 115200;
@@ -54,6 +57,8 @@ private:
     bool trayIconAdded_ = false;
     bool shutdownComplete_ = false;
     bool enableDebugLogging_ = false;
+    bool codexUnavailableNotificationShown_ = false;
+    bool codexAuthNotificationShown_ = false;
 
     std::wstring currentPort_;
 
@@ -61,6 +66,8 @@ private:
     HardwareMonitor monitor_;
     SerialCommunicator serial_;
     HardwareSerialSender serialSender_;
+    CodexQuotaMonitor codexQuotaMonitor_;
+    CodexQuotaSerialSender codexQuotaSerialSender_;
 
 private:
     static LRESULT CALLBACK WindowProcedure(
@@ -90,6 +97,7 @@ private:
         const std::wstring& message,
         DWORD iconFlags
     );
+    void HandleCodexStatus(CodexQuotaStatus status);
 
     void ConfigureCommunication();
     void TryAutomaticConnection();

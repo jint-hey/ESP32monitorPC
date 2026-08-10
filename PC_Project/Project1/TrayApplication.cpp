@@ -109,6 +109,39 @@ int TrayApplication::Run(
         );
     }
 
+    codexQuotaMonitor_.SetStatusCallback(
+        [this](const CodexQuotaStatus status)
+        {
+            if (window_ != nullptr)
+            {
+                PostMessageW(
+                    window_,
+                    CODEX_STATUS_MESSAGE,
+                    static_cast<WPARAM>(status),
+                    0
+                );
+            }
+        }
+    );
+
+    if (!codexQuotaMonitor_.Start(&logger_))
+    {
+        logger_.Error(
+            L"Codex quota monitor thread could not be started."
+        );
+        HandleCodexStatus(CodexQuotaStatus::CollectorError);
+    }
+
+    if (!codexQuotaSerialSender_.Start(
+            codexQuotaMonitor_,
+            serial_,
+            &logger_))
+    {
+        logger_.Error(
+            L"Codex quota serial sender could not be started."
+        );
+    }
+
     TryAutomaticConnection();
 
     logger_.Info(
@@ -275,6 +308,12 @@ LRESULT TrayApplication::HandleWindowMessage(
 
     case WM_QUERYENDSESSION:
         return TRUE;
+
+    case CODEX_STATUS_MESSAGE:
+        HandleCodexStatus(
+            static_cast<CodexQuotaStatus>(wParam)
+        );
+        return 0;
 
     case WM_ENDSESSION:
         if (wParam != FALSE)
@@ -560,6 +599,37 @@ void TrayApplication::ShowNotification(
     );
 }
 
+void TrayApplication::HandleCodexStatus(
+    const CodexQuotaStatus status
+)
+{
+    if (status == CodexQuotaStatus::AuthRequired)
+    {
+        if (!codexAuthNotificationShown_)
+        {
+            codexAuthNotificationShown_ = true;
+            ShowNotification(
+                APPLICATION_NAME,
+                L"Codex 额度不可用：请先在 Codex 中登录 ChatGPT。",
+                NIIF_WARNING
+            );
+        }
+        return;
+    }
+
+    if ((status == CodexQuotaStatus::Unavailable ||
+         status == CodexQuotaStatus::CollectorError) &&
+        !codexUnavailableNotificationShown_)
+    {
+        codexUnavailableNotificationShown_ = true;
+        ShowNotification(
+            APPLICATION_NAME,
+            L"Codex 额度采集暂不可用，硬件监控仍会继续运行。",
+            NIIF_WARNING
+        );
+    }
+}
+
 void TrayApplication::ConfigureCommunication()
 {
     serial_.SetLogger(&logger_);
@@ -694,6 +764,7 @@ bool TrayApplication::OpenPort(
     }
 
     currentPort_ = portName;
+    codexQuotaSerialSender_.NotifySerialConnected();
     UpdateTrayTooltip();
     return true;
 }
@@ -719,9 +790,12 @@ void TrayApplication::Shutdown()
         L"Tray application is shutting down."
     );
 
+    codexQuotaSerialSender_.Stop();
     serialSender_.Stop();
     serial_.Close();
     serial_.SetReceiveCallback({});
+    codexQuotaMonitor_.SetStatusCallback({});
+    codexQuotaMonitor_.Stop();
     logger_.StopHardwareLogging();
     monitor_.Stop();
 

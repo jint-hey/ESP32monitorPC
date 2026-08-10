@@ -137,6 +137,34 @@ For each GPU:
 GPU Count is also limited to 0, 1 or 2.
 
 -------------------------------------------------------------------------------
+CodexQuota payload
+-------------------------------------------------------------------------------
+
+Packet type: 0x03
+
+The fixed payload size is 43 bytes. All multi-byte fields are little endian.
+
+    Offset    Size        Field
+    ----------------------------------------------------------------
+    0         1 byte      Payload schema version (= 1)
+    1         1 byte      Status: 0 unavailable, 1 valid,
+                         2 ChatGPT login required, 3 collector error
+    2         1 byte      Flags: bit0 primary window valid,
+                         bit1 secondary window valid,
+                         bit2 rate limit reached
+    3         8 bytes     Collection time, Unix seconds
+    11        2 bytes     Primary used percentage x 100
+    13        2 bytes     Primary remaining percentage x 100
+    15        4 bytes     Primary window duration in minutes
+    19        8 bytes     Primary reset time, Unix seconds
+    27        2 bytes     Secondary used percentage x 100
+    29        2 bytes     Secondary remaining percentage x 100
+    31        4 bytes     Secondary window duration in minutes
+    35        8 bytes     Secondary reset time, Unix seconds
+
+An invalid window has its flag cleared and all of its fields set to zero.
+
+-------------------------------------------------------------------------------
 Packet loss policy
 -------------------------------------------------------------------------------
 
@@ -171,6 +199,7 @@ enum class PacketType : std::uint8_t
 {
     HardwareInfo = 0x01,
     HardwareUsage = 0x02,
+    CodexQuota = 0x03,
 
     Ping = 0x10,
     Pong = 0x11,
