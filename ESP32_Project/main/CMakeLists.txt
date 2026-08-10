@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
         "app_main.cpp"
+        "codex_quota_state.cpp"
         "hardware_state.cpp"
         "oled_display.cpp"
         "oled_ui.cpp"

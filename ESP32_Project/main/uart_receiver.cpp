@@ -5,9 +5,11 @@
 #include "driver/uart.h"
 
 UartReceiver::UartReceiver(
-    HardwareStateStore& state
+    HardwareStateStore& hardwareState,
+    CodexQuotaStateStore& codexQuotaState
 )
-    : state_(state)
+    : hardwareState_(hardwareState),
+      codexQuotaState_(codexQuotaState)
 {}
 
 esp_err_t UartReceiver::Start()
@@ -141,7 +143,13 @@ void UartReceiver::HandlePacket(
         return;
     }
 
-    state_.ApplyPacket(packet);
+    if (packet.type == pc_protocol::TYPE_CODEX_QUOTA)
+    {
+        codexQuotaState_.ApplyPacket(packet);
+        return;
+    }
+
+    hardwareState_.ApplyPacket(packet);
 }
 
 void UartReceiver::SendPong(uint16_t sequence)

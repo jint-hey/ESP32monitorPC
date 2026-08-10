@@ -1,5 +1,6 @@
 #pragma once
 
+#include "codex_quota_state.hpp"
 #include "hardware_state.hpp"
 #include "oled_display.hpp"
 
@@ -15,7 +16,9 @@
 class OledUi
 {
 public:
-    OledUi(OledDisplay& display, HardwareStateStore& state);
+    OledUi(OledDisplay& display,
+           HardwareStateStore& hardwareState,
+           CodexQuotaStateStore& codexQuotaState);
 
     esp_err_t Start();
 
@@ -24,6 +27,12 @@ private:
     void TaskLoop();
     void DrawWaitingScreen();
     void DrawDashboard(const HardwareSnapshot& snapshot, uint64_t nowMs);
+    void DrawCodexPage(const CodexQuotaSnapshot& snapshot);
+    void DrawCodexWindow(int textY,
+                         int barY,
+                         char label,
+                         const CodexQuotaWindow& window);
+    void DrawProgressBar(int x, int y, int width, int height, uint16_t usedX100);
     void DrawUsageRow(int y,
                       std::string_view label,
                       std::string_view name,
@@ -38,6 +47,7 @@ private:
                             std::size_t rowIndex);
 
     OledDisplay& display_;
-    HardwareStateStore& state_;
+    HardwareStateStore& hardwareState_;
+    CodexQuotaStateStore& codexQuotaState_;
     TaskHandle_t task_ = nullptr;
 };

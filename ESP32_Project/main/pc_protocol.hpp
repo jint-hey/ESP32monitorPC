@@ -14,6 +14,7 @@ namespace pc_protocol
 
     inline constexpr uint8_t TYPE_HARDWARE_INFO = 0x01;
     inline constexpr uint8_t TYPE_HARDWARE_USAGE = 0x02;
+    inline constexpr uint8_t TYPE_CODEX_QUOTA = 0x03;
     inline constexpr uint8_t TYPE_PING = 0x10;
     inline constexpr uint8_t TYPE_PONG = 0x11;
 

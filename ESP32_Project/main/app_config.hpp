@@ -18,4 +18,7 @@ namespace app_config
     inline constexpr gpio_num_t OLED_SCL_GPIO = GPIO_NUM_14;
     inline constexpr uint32_t OLED_I2C_FREQUENCY_HZ = 400000;
     inline constexpr uint8_t OLED_I2C_ADDRESS = 0x3C;
+
+    // Hardware monitor and Codex quota page rotation interval.
+    inline constexpr uint32_t OLED_PAGE_SWITCH_SECONDS = 5;
 }

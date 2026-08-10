@@ -1,7 +1,6 @@
 #include "hardware_state.hpp"
 
 #include <array>
-#include <cstdio>
 
 namespace
 {
@@ -195,21 +194,6 @@ bool HardwareStateStore::ApplyHardwareUsage(
 
     state_.gpuCount = gpuCount;
     state_.gpuUsageX100 = usages;
-
-    for (std::size_t index = 0;
-        index < gpuCount;
-        ++index)
-    {
-        if (state_.gpuNames[index][0] == '\0')
-        {
-            std::snprintf(
-                state_.gpuNames[index].data(),
-                state_.gpuNames[index].size(),
-                "GPU%u",
-                static_cast<unsigned int>(index)
-            );
-        }
-    }
 
     state_.lastPacketSequence = packet.sequence;
     state_.hasUsage = true;

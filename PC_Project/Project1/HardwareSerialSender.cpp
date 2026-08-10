@@ -2,6 +2,14 @@
 
 #include "HardwarePacketEncoder.h"
 
+namespace
+{
+    // HardwareInfo contains GPU names. Resend it periodically so an ESP32
+    // reset can recover the names even when Windows keeps the COM port open.
+    constexpr auto HARDWARE_INFO_RESEND_INTERVAL =
+        std::chrono::seconds(10);
+}
+
 HardwareSerialSender::
 HardwareSerialSender()
 {}
@@ -129,6 +137,9 @@ void HardwareSerialSender::WorkerLoop()
     auto nextSend =
         Clock::now() + interval_;
 
+    auto nextHardwareInfoSend =
+        Clock::now();
+
     while (!stopRequested_)
     {
         condition_.wait_until(
@@ -169,10 +180,12 @@ void HardwareSerialSender::WorkerLoop()
                 lastHardwareSequence_)
             {
                 // ------------------------------------------------------------
-                // Send HardwareInfo once.
+                // Send HardwareInfo at startup and periodically. The latter
+                // restores GPU names after an ESP32-only reset.
                 // ------------------------------------------------------------
 
-                if (!hardwareInfoSent_)
+                const auto now = Clock::now();
+                if (!hardwareInfoSent_ || now >= nextHardwareInfoSend)
                 {
                     const auto infoPayload =
                         HardwarePacketEncoder::
@@ -180,12 +193,19 @@ void HardwareSerialSender::WorkerLoop()
                             usage
                         );
 
-                    hardwareInfoSent_ =
+                    const bool infoSent =
                         serial->SendPacket(
                             PacketType::
                             HardwareInfo,
                             infoPayload
                         );
+
+                    hardwareInfoSent_ = infoSent;
+                    if (infoSent)
+                    {
+                        nextHardwareInfoSend =
+                            now + HARDWARE_INFO_RESEND_INTERVAL;
+                    }
                 }
 
                 // ------------------------------------------------------------

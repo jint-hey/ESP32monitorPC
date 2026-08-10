@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "app_config.hpp"
 #include "esp_timer.h"
 
 namespace
@@ -17,11 +18,35 @@ constexpr int NAME_WIDTH = VALUE_X - NAME_X;
 constexpr uint64_t EDGE_PAUSE_MS = 800;
 constexpr uint64_t PIXEL_TIME_MS = 45;
 constexpr uint64_t ROW_PHASE_MS = 250;
+static_assert(app_config::OLED_PAGE_SWITCH_SECONDS > 0,
+              "OLED page switch interval must be greater than zero");
+constexpr uint64_t PAGE_SWITCH_PERIOD_MS =
+    static_cast<uint64_t>(app_config::OLED_PAGE_SWITCH_SECONDS) * 1000U;
 constexpr TickType_t UI_REFRESH_PERIOD = pdMS_TO_TICKS(100);
+
+void FormatWindowDuration(const uint32_t minutes, char* output, const std::size_t size)
+{
+    if (minutes != 0 && minutes % 1440U == 0)
+    {
+        std::snprintf(output, size, "%luD", static_cast<unsigned long>(minutes / 1440U));
+    }
+    else if (minutes != 0 && minutes % 60U == 0)
+    {
+        std::snprintf(output, size, "%luH", static_cast<unsigned long>(minutes / 60U));
+    }
+    else
+    {
+        std::snprintf(output, size, "%luM", static_cast<unsigned long>(minutes));
+    }
+}
 }
 
-OledUi::OledUi(OledDisplay& display, HardwareStateStore& state)
-    : display_(display), state_(state)
+OledUi::OledUi(OledDisplay& display,
+               HardwareStateStore& hardwareState,
+               CodexQuotaStateStore& codexQuotaState)
+    : display_(display),
+      hardwareState_(hardwareState),
+      codexQuotaState_(codexQuotaState)
 {}
 
 esp_err_t OledUi::Start()
@@ -55,21 +80,130 @@ void OledUi::TaskLoop()
 {
     while (true)
     {
-        const HardwareSnapshot snapshot = state_.Copy();
+        const uint64_t nowMs = static_cast<uint64_t>(esp_timer_get_time()) / 1000U;
         display_.Clear();
 
-        if (snapshot.hasUsage)
+        if ((nowMs / PAGE_SWITCH_PERIOD_MS) % 2U == 0U)
         {
-            const uint64_t nowMs = static_cast<uint64_t>(esp_timer_get_time()) / 1000U;
-            DrawDashboard(snapshot, nowMs);
+            const HardwareSnapshot snapshot = hardwareState_.Copy();
+            if (snapshot.hasUsage)
+            {
+                DrawDashboard(snapshot, nowMs);
+            }
+            else
+            {
+                DrawWaitingScreen();
+            }
         }
         else
         {
-            DrawWaitingScreen();
+            DrawCodexPage(codexQuotaState_.Copy());
         }
 
         display_.Refresh();
         vTaskDelay(UI_REFRESH_PERIOD);
+    }
+}
+
+void OledUi::DrawCodexPage(const CodexQuotaSnapshot& snapshot)
+{
+    display_.DrawText(31, 0, "CODEX QUOTA");
+
+    if (!snapshot.hasPacket)
+    {
+        display_.DrawText(22, 24, "WAITING CODEX");
+        display_.DrawText(31, 40, "UART DATA");
+        return;
+    }
+
+    if (snapshot.status != CodexQuotaStatus::Valid)
+    {
+        switch (snapshot.status)
+        {
+        case CodexQuotaStatus::AuthRequired:
+            display_.DrawText(22, 24, "LOGIN REQUIRED");
+            break;
+        case CodexQuotaStatus::CollectorError:
+            display_.DrawText(13, 24, "COLLECTOR ERROR");
+            break;
+        case CodexQuotaStatus::Unavailable:
+        default:
+            display_.DrawText(25, 24, "UNAVAILABLE");
+            break;
+        }
+        return;
+    }
+
+    DrawCodexWindow(10, 19, 'P', snapshot.primary);
+    DrawCodexWindow(31, 40, 'S', snapshot.secondary);
+
+    if (snapshot.rateLimitReached)
+    {
+        display_.DrawText(22, 54, "RATE LIMITED");
+    }
+    else
+    {
+        std::array<char, 22> footer{};
+        std::snprintf(footer.data(), footer.size(), "UPDATE %lu",
+                      static_cast<unsigned long>(snapshot.updateCount));
+        display_.DrawText(37, 54, footer.data());
+    }
+}
+
+void OledUi::DrawCodexWindow(const int textY,
+                             const int barY,
+                             const char label,
+                             const CodexQuotaWindow& window)
+{
+    // The longest formatted line needs 25 visible characters plus '\0'.
+    // DrawTextClipped still limits rendering to the 126-pixel viewport.
+    std::array<char, 32> text{};
+    if (!window.valid)
+    {
+        std::snprintf(text.data(), text.size(), "%c WINDOW N/A", label);
+        display_.DrawText(1, textY, text.data());
+        DrawProgressBar(1, barY, 126, 7, 0);
+        return;
+    }
+
+    std::array<char, 10> duration{};
+    FormatWindowDuration(window.windowDurationMinutes, duration.data(), duration.size());
+    std::snprintf(text.data(), text.size(), "%c%s U%u.%u R%u.%u",
+                  label,
+                  duration.data(),
+                  window.usedPercentX100 / 100U,
+                  (window.usedPercentX100 % 100U) / 10U,
+                  window.remainingPercentX100 / 100U,
+                  (window.remainingPercentX100 % 100U) / 10U);
+    display_.DrawTextClipped(1, textY, text.data(), 1, 126);
+    DrawProgressBar(1, barY, 126, 7, window.usedPercentX100);
+}
+
+void OledUi::DrawProgressBar(const int x,
+                             const int y,
+                             const int width,
+                             const int height,
+                             const uint16_t usedX100)
+{
+    for (int pixelX = x; pixelX < x + width; ++pixelX)
+    {
+        display_.DrawPixel(pixelX, y);
+        display_.DrawPixel(pixelX, y + height - 1);
+    }
+    for (int pixelY = y; pixelY < y + height; ++pixelY)
+    {
+        display_.DrawPixel(x, pixelY);
+        display_.DrawPixel(x + width - 1, pixelY);
+    }
+
+    const int innerWidth = width - 2;
+    const int filledWidth = innerWidth * std::min<uint16_t>(usedX100, 10000U) / 10000;
+    for (int pixelX = 0; pixelX < filledWidth; ++pixelX)
+    {
+        for (int pixelY = 1; pixelY < height - 1; ++pixelY)
+        {
+            display_.DrawPixel(x + 1 + pixelX, y + pixelY);
+        }
     }
 }
 
@@ -100,7 +234,11 @@ void OledUi::DrawDashboard(const HardwareSnapshot& snapshot, const uint64_t nowM
                                            ? std::string_view("GPU")
                                            : (gpuIndex == 0 ? std::string_view("GPU0")
                                                             : std::string_view("GPU1"));
-        const std::string displayName = ToDisplayText(snapshot.gpuNames[gpuIndex].data());
+        std::string displayName = ToDisplayText(snapshot.gpuNames[gpuIndex].data());
+        if (displayName.empty())
+        {
+            displayName = "N/A";
+        }
         DrawUsageRow(firstY + static_cast<int>(gpuIndex + 2) * rowHeight,
                      label,
                      displayName,

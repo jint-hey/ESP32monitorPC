@@ -1,5 +1,6 @@
 #pragma once
 
+#include "codex_quota_state.hpp"
 #include "hardware_state.hpp"
 #include "pc_protocol.hpp"
 
@@ -14,7 +15,8 @@ class UartReceiver
 {
 public:
     explicit UartReceiver(
-        HardwareStateStore& state
+        HardwareStateStore& hardwareState,
+        CodexQuotaStateStore& codexQuotaState
     );
 
     esp_err_t Start();
@@ -27,7 +29,8 @@ private:
     );
     void SendPong(uint16_t sequence);
 
-    HardwareStateStore& state_;
+    HardwareStateStore& hardwareState_;
+    CodexQuotaStateStore& codexQuotaState_;
     pc_protocol::Parser parser_;
     TaskHandle_t task_ = nullptr;
     std::array<uint8_t, 256> readBuffer_{};
