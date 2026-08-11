@@ -44,10 +44,12 @@ void FormatWindowDuration(const uint32_t minutes, char* output, const std::size_
 
 OledUi::OledUi(OledDisplay& display,
                HardwareStateStore& hardwareState,
-               CodexQuotaStateStore& codexQuotaState)
+               CodexQuotaStateStore& codexQuotaState,
+               PcConnectionStateStore& connectionState)
     : display_(display),
       hardwareState_(hardwareState),
-      codexQuotaState_(codexQuotaState)
+      codexQuotaState_(codexQuotaState),
+      connectionState_(connectionState)
 {}
 
 esp_err_t OledUi::Start()
@@ -84,17 +86,15 @@ void OledUi::TaskLoop()
         const uint64_t nowMs = static_cast<uint64_t>(esp_timer_get_time()) / 1000U;
         display_.Clear();
 
-        if ((nowMs / PAGE_SWITCH_PERIOD_MS) % 2U == 0U)
+        const HardwareSnapshot hardwareSnapshot = hardwareState_.Copy();
+
+        if (!connectionState_.IsConnected() || !hardwareSnapshot.hasUsage)
         {
-            const HardwareSnapshot snapshot = hardwareState_.Copy();
-            if (snapshot.hasUsage)
-            {
-                DrawDashboard(snapshot, nowMs);
-            }
-            else
-            {
-                DrawWaitingScreen();
-            }
+            DrawWaitingScreen();
+        }
+        else if ((nowMs / PAGE_SWITCH_PERIOD_MS) % 2U == 0U)
+        {
+            DrawDashboard(hardwareSnapshot, nowMs);
         }
         else
         {
@@ -216,7 +216,7 @@ void OledUi::DrawProgressBar(const int x,
 void OledUi::DrawWaitingScreen()
 {
     display_.DrawText(22, 18, "PC MONITOR");
-    display_.DrawText(13, 38, "WAITING UART0");
+    display_.DrawText(16, 38, "watting for link");
 }
 
 void OledUi::DrawDashboard(const HardwareSnapshot& snapshot, const uint64_t nowMs)

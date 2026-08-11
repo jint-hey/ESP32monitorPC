@@ -45,6 +45,13 @@ CodexQuotaStateStore::CodexQuotaStateStore()
     configASSERT(mutex_ != nullptr);
 }
 
+void CodexQuotaStateStore::Reset()
+{
+    xSemaphoreTake(mutex_, portMAX_DELAY);
+    state_ = CodexQuotaSnapshot{};
+    xSemaphoreGive(mutex_);
+}
+
 bool CodexQuotaStateStore::ApplyPacket(const pc_protocol::Packet& packet)
 {
     if (packet.type != pc_protocol::TYPE_CODEX_QUOTA ||

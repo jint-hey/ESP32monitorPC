@@ -5,6 +5,7 @@ idf_component_register(
         "hardware_state.cpp"
         "oled_display.cpp"
         "oled_ui.cpp"
+        "pc_connection_state.cpp"
         "pc_protocol.cpp"
         "uart_receiver.cpp"
     INCLUDE_DIRS "."

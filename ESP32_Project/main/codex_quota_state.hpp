@@ -43,6 +43,7 @@ public:
     CodexQuotaStateStore(const CodexQuotaStateStore&) = delete;
     CodexQuotaStateStore& operator=(const CodexQuotaStateStore&) = delete;
 
+    void Reset();
     bool ApplyPacket(const pc_protocol::Packet& packet);
     CodexQuotaSnapshot Copy() const;
 

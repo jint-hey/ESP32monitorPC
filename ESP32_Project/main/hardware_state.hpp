@@ -40,6 +40,8 @@ public:
         const HardwareStateStore&
         ) = delete;
 
+    void Reset();
+
     bool ApplyPacket(
         const pc_protocol::Packet& packet
     );

@@ -13,6 +13,9 @@ namespace app_config
     inline constexpr int UART_DRIVER_RX_BUFFER_SIZE = 2048;
     inline constexpr int UART_DRIVER_TX_BUFFER_SIZE = 1024;
 
+    // Return to the waiting screen after this period without a valid PC packet.
+    inline constexpr uint32_t PC_CONNECTION_TIMEOUT_MS = 3000;
+
     inline constexpr i2c_port_t OLED_I2C_PORT = I2C_NUM_1;
     inline constexpr gpio_num_t OLED_SDA_GPIO = GPIO_NUM_13;
     inline constexpr gpio_num_t OLED_SCL_GPIO = GPIO_NUM_14;

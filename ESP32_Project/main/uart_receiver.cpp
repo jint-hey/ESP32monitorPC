@@ -6,10 +6,12 @@
 
 UartReceiver::UartReceiver(
     HardwareStateStore& hardwareState,
-    CodexQuotaStateStore& codexQuotaState
+    CodexQuotaStateStore& codexQuotaState,
+    PcConnectionStateStore& connectionState
 )
     : hardwareState_(hardwareState),
-      codexQuotaState_(codexQuotaState)
+      codexQuotaState_(codexQuotaState),
+      connectionState_(connectionState)
 {}
 
 esp_err_t UartReceiver::Start()
@@ -128,28 +130,41 @@ void UartReceiver::TaskLoop()
 
         while (parser_.TryGetPacket(packet))
         {
-            HandlePacket(packet);
+            if (HandlePacket(packet))
+            {
+                connectionState_.MarkPacketReceived();
+            }
+        }
+
+        if (connectionState_.MarkDisconnectedIfTimedOut())
+        {
+            hardwareState_.Reset();
+            codexQuotaState_.Reset();
         }
     }
 }
 
-void UartReceiver::HandlePacket(
+bool UartReceiver::HandlePacket(
     const pc_protocol::Packet& packet
 )
 {
     if (packet.type == pc_protocol::TYPE_PING)
     {
+        if (packet.payloadLength != 0)
+        {
+            return false;
+        }
+
         SendPong(packet.sequence);
-        return;
+        return true;
     }
 
     if (packet.type == pc_protocol::TYPE_CODEX_QUOTA)
     {
-        codexQuotaState_.ApplyPacket(packet);
-        return;
+        return codexQuotaState_.ApplyPacket(packet);
     }
 
-    hardwareState_.ApplyPacket(packet);
+    return hardwareState_.ApplyPacket(packet);
 }
 
 void UartReceiver::SendPong(uint16_t sequence)

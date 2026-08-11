@@ -3,6 +3,7 @@
 #include "codex_quota_state.hpp"
 #include "hardware_state.hpp"
 #include "oled_display.hpp"
+#include "pc_connection_state.hpp"
 
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
@@ -18,7 +19,8 @@ class OledUi
 public:
     OledUi(OledDisplay& display,
            HardwareStateStore& hardwareState,
-           CodexQuotaStateStore& codexQuotaState);
+           CodexQuotaStateStore& codexQuotaState,
+           PcConnectionStateStore& connectionState);
 
     esp_err_t Start();
 
@@ -49,5 +51,6 @@ private:
     OledDisplay& display_;
     HardwareStateStore& hardwareState_;
     CodexQuotaStateStore& codexQuotaState_;
+    PcConnectionStateStore& connectionState_;
     TaskHandle_t task_ = nullptr;
 };

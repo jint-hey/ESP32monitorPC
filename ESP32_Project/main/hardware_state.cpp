@@ -24,6 +24,13 @@ HardwareStateStore::HardwareStateStore()
     configASSERT(mutex_ != nullptr);
 }
 
+void HardwareStateStore::Reset()
+{
+    xSemaphoreTake(mutex_, portMAX_DELAY);
+    state_ = HardwareSnapshot{};
+    xSemaphoreGive(mutex_);
+}
+
 bool HardwareStateStore::ApplyPacket(
     const pc_protocol::Packet& packet
 )
