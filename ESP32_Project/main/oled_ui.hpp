@@ -4,6 +4,7 @@
 #include "hardware_state.hpp"
 #include "oled_display.hpp"
 #include "pc_connection_state.hpp"
+#include "router_monitor_status.hpp"
 
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
@@ -20,7 +21,8 @@ public:
     OledUi(OledDisplay& display,
            HardwareStateStore& hardwareState,
            CodexQuotaStateStore& codexQuotaState,
-           PcConnectionStateStore& connectionState);
+           PcConnectionStateStore& connectionState,
+           router_monitor::RouterMonitorStatusStore& routerMonitorState);
 
     esp_err_t Start();
 
@@ -30,6 +32,13 @@ private:
     void DrawWaitingScreen();
     void DrawDashboard(const HardwareSnapshot& snapshot, uint64_t nowMs);
     void DrawCodexPage(const CodexQuotaSnapshot& snapshot);
+    void DrawRouterMonitorPage(const router_monitor::RouterMonitorSnapshot& snapshot,
+                               uint64_t nowMs);
+    void DrawRouterTextRow(int y,
+                           std::string_view label,
+                           const char* value,
+                           uint64_t nowMs,
+                           std::size_t rowIndex);
     void DrawProgressBar(int x,
                          int y,
                          int width,
@@ -52,5 +61,6 @@ private:
     HardwareStateStore& hardwareState_;
     CodexQuotaStateStore& codexQuotaState_;
     PcConnectionStateStore& connectionState_;
+    router_monitor::RouterMonitorStatusStore& routerMonitorState_;
     TaskHandle_t task_ = nullptr;
 };
