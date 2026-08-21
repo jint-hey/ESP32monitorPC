@@ -56,6 +56,11 @@ bool WifiManager::start(const Config& config, int timeout_seconds) {
         esp_wifi_set_config(WIFI_IF_STA, &wifi_config) != ESP_OK ||
         esp_wifi_start() != ESP_OK) return false;
     initialized_ = true;
+    const esp_err_t power_save_result = esp_wifi_set_ps(WIFI_PS_NONE);
+    if (power_save_result != ESP_OK) {
+        ESP_LOGW(tag, "Failed to disable Wi-Fi power saving: %s",
+                 esp_err_to_name(power_save_result));
+    }
     ESP_LOGI(tag, "Connecting to Wi-Fi SSID: %s", config.wifi_ssid.c_str());
     return wait_connected(timeout_seconds);
 }

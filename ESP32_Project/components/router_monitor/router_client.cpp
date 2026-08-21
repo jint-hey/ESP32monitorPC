@@ -10,6 +10,7 @@
 
 #include "cJSON.h"
 #include "esp_err.h"
+#include "esp_http_client.h"
 
 namespace router_monitor {
 
@@ -48,9 +49,22 @@ static bool read_error_code(const cJSON* root, bool& present, int& code) {
 
 static std::string transport_message(const HttpResponse& response) {
     if (!response.transport_ok()) {
-        return "HTTP 传输失败：" + std::string(esp_err_to_name(response.transport_error));
+        std::string message =
+            "HTTP 传输失败：" + std::string(esp_err_to_name(response.transport_error));
+        if (response.socket_errno > 0) {
+            message += " (errno " + std::to_string(response.socket_errno) + ": " +
+                       std::strerror(response.socket_errno) + ")";
+        }
+        return message;
     }
     return "HTTP 请求失败（状态码 " + std::to_string(response.status_code) + "）";
+}
+
+static bool retryable_transport_error(const HttpResponse& response) {
+    if (response.transport_ok()) return false;
+    return response.transport_error != ESP_ERR_NO_MEM &&
+           response.transport_error != ESP_ERR_INVALID_ARG &&
+           response.transport_error != ESP_ERR_HTTP_INVALID_TRANSPORT;
 }
 
 RouterClient::RouterClient(const Config& config)
@@ -76,50 +90,60 @@ bool RouterClient::login(std::string& error) {
         error = "创建登录请求失败：内存不足";
         return false;
     }
-    const HttpResponse response = http_.post_json(router_url_ + "/", payload);
-    cJSON* root = cJSON_Parse(response.body.c_str());
-    bool code_present = false;
-    int code = 0;
-    const bool valid_code = root != nullptr && read_error_code(root, code_present, code);
-    if (!response.http_ok()) {
-        stok_.clear();
-        if (response.status_code == 401 && valid_code && code_present) {
-            int remaining = 0;
-            const cJSON* data = cJSON_GetObjectItemCaseSensitive(root, "data");
-            const cJSON* time = cJSON_IsObject(data)
-                                    ? cJSON_GetObjectItemCaseSensitive(data, "time") : nullptr;
-            if (cJSON_IsNumber(time)) remaining = time->valueint;
-            error = "路由器认证失败（错误码 " + std::to_string(code) + "，密码错误";
-            if (remaining > 0) {
-                error += "；锁定前剩余尝试次数 " + std::to_string(remaining);
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        const HttpResponse response = http_.post_json(router_url_ + "/", payload);
+        cJSON* root = cJSON_Parse(response.body.c_str());
+        bool code_present = false;
+        int code = 0;
+        const bool valid_code = root != nullptr && read_error_code(root, code_present, code);
+        if (!response.http_ok()) {
+            stok_.clear();
+            if (attempt == 0 && retryable_transport_error(response)) {
+                cJSON_Delete(root);
+                continue;
             }
-            error += "）";
-        } else {
-            error = transport_message(response);
+            if (response.status_code == 401 && valid_code && code_present) {
+                int remaining = 0;
+                const cJSON* data = cJSON_GetObjectItemCaseSensitive(root, "data");
+                const cJSON* time = cJSON_IsObject(data)
+                                        ? cJSON_GetObjectItemCaseSensitive(data, "time") : nullptr;
+                if (cJSON_IsNumber(time)) remaining = time->valueint;
+                error = "路由器认证失败（错误码 " + std::to_string(code) +
+                        "，密码错误";
+                if (remaining > 0) {
+                    error += "；锁定前剩余尝试次数 " + std::to_string(remaining);
+                }
+                error += "）";
+            } else {
+                error = transport_message(response);
+            }
+            cJSON_Delete(root);
+            return false;
         }
-        cJSON_Delete(root);
-        return false;
-    }
-    if (root == nullptr || !valid_code) {
-        cJSON_Delete(root);
-        error = "路由器登录响应不是有效 JSON";
-        return false;
-    }
-    if (code_present && code != 0) {
-        cJSON_Delete(root);
-        stok_.clear();
-        error = "路由器认证失败（错误码 " + std::to_string(code) + "）";
-        return false;
-    }
-    const cJSON* stok = cJSON_GetObjectItemCaseSensitive(root, "stok");
-    if (!cJSON_IsString(stok) || stok->valuestring == nullptr || stok->valuestring[0] == '\0') {
+        if (root == nullptr || !valid_code) {
+            cJSON_Delete(root);
+            error = "路由器登录响应不是有效 JSON";
+            return false;
+        }
+        if (code_present && code != 0) {
+            cJSON_Delete(root);
+            stok_.clear();
+            error = "路由器认证失败（错误码 " + std::to_string(code) + "）";
+            return false;
+        }
+        const cJSON* stok = cJSON_GetObjectItemCaseSensitive(root, "stok");
+        if (cJSON_IsString(stok) && stok->valuestring != nullptr &&
+            stok->valuestring[0] != '\0') {
+            stok_ = percent_decode(stok->valuestring);
+            cJSON_Delete(root);
+            return true;
+        }
         cJSON_Delete(root);
         error = "路由器登录响应缺少 stok";
         return false;
     }
-    stok_ = percent_decode(stok->valuestring);
-    cJSON_Delete(root);
-    return true;
+    error = "路由器登录重试失败";
+    return false;
 }
 
 bool RouterClient::query_online_hosts(std::string& response_body, std::string& error) {
@@ -130,9 +154,11 @@ bool RouterClient::query_online_hosts(std::string& response_body, std::string& e
         const std::string url = router_url_ + "/stok=" + percent_encode_path(stok_) + "/ds";
         const HttpResponse response = http_.post_json(url, payload);
         if (!response.http_ok()) {
-            if (response.status_code == 401 && attempt == 0) {
+            if (attempt == 0 &&
+                (response.status_code == 401 || retryable_transport_error(response))) {
                 stok_.clear();
                 if (login(error)) continue;
+                return false;
             }
             error = transport_message(response);
             return false;

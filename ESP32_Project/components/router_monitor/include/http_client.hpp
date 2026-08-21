@@ -8,6 +8,7 @@ namespace router_monitor {
 
 struct HttpResponse {
     esp_err_t transport_error{ESP_OK};
+    int socket_errno{};
     int status_code{};
     std::string body;
 

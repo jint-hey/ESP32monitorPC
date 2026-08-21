@@ -24,7 +24,6 @@ HttpResponse HttpClient::post_json(const std::string& url, const std::string& js
     settings.user_data = &response.body;
     settings.timeout_ms = timeout_seconds_ * 1000;
     settings.crt_bundle_attach = esp_crt_bundle_attach;
-    settings.keep_alive_enable = true;
 
     esp_http_client_handle_t client = esp_http_client_init(&settings);
     if (client == nullptr) {
@@ -39,6 +38,8 @@ HttpResponse HttpClient::post_json(const std::string& url, const std::string& js
     response.transport_error = esp_http_client_perform(client);
     if (response.transport_error == ESP_OK) {
         response.status_code = esp_http_client_get_status_code(client);
+    } else {
+        response.socket_errno = esp_http_client_get_errno(client);
     }
     esp_http_client_cleanup(client);
     return response;
