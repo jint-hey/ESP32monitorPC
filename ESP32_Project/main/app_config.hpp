@@ -17,8 +17,8 @@ namespace app_config
     inline constexpr uint32_t PC_CONNECTION_TIMEOUT_MS = 3000;
 
     inline constexpr i2c_port_t OLED_I2C_PORT = I2C_NUM_1;
-    inline constexpr gpio_num_t OLED_SDA_GPIO = GPIO_NUM_13;
-    inline constexpr gpio_num_t OLED_SCL_GPIO = GPIO_NUM_14;
+    inline constexpr gpio_num_t OLED_SDA_GPIO = GPIO_NUM_12;
+    inline constexpr gpio_num_t OLED_SCL_GPIO = GPIO_NUM_13;
     inline constexpr uint32_t OLED_I2C_FREQUENCY_HZ = 400000;
     inline constexpr uint8_t OLED_I2C_ADDRESS = 0x3C;
 

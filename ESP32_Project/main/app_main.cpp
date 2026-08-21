@@ -32,5 +32,8 @@ extern "C" void app_main()
     uartReceiver.Start();
     // Runs independently at a lower priority than UART and OLED tasks.
     // A router-monitor startup failure must not stop the original PC monitor.
-    (void)routerMonitor.Start();
+    if (routerMonitor.Start() != ESP_OK)
+    {
+        routerMonitorState.UpdateError("TASK START FAILED");
+    }
 }
