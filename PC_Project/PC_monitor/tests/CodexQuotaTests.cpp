@@ -136,6 +136,23 @@ namespace
               "API key is not ChatGPT quota auth");
     }
 
+    void TestUnrelatedRequestIdsAreIgnored()
+    {
+        const auto serverRequest = CodexQuotaJsonParser::ParseLine(
+            R"({"id":99,"method":"some/future/serverRequest","params":{}})"
+        );
+        Check(serverRequest.type == CodexAppServerMessageType::Ignored,
+              "unrelated server request is ignored");
+
+        const auto knownError = CodexQuotaJsonParser::ParseLine(
+            R"({"id":3,"error":{"code":-32001,"message":"retry later"}})"
+        );
+        Check(knownError.type == CodexAppServerMessageType::Error,
+              "known quota request error is reported");
+        Check(knownError.requestId == 3,
+              "known request error identifies the failed request");
+    }
+
     void TestV2PayloadAndPacketCrc()
     {
         CodexQuotaSnapshot snapshot;
@@ -179,6 +196,12 @@ namespace
             raw.size() - 4
         );
         Check(encodedCrc == calculatedCrc, "packet CRC covers v2 payload");
+
+        snapshot.stale = true;
+        const std::vector<std::uint8_t> stalePayload =
+            CodexQuotaPacketEncoder::BuildPayload(snapshot);
+        Check(stalePayload[2] == 0x07,
+              "stale v2 payload sets reserved flags bit 2");
     }
 }
 
@@ -188,6 +211,7 @@ int main()
     TestFallbackAndLimitIdLookup();
     TestNotificationsAndInvalidInput();
     TestAuthenticationMessages();
+    TestUnrelatedRequestIdsAreIgnored();
     TestV2PayloadAndPacketCrc();
 
     if (failures == 0)

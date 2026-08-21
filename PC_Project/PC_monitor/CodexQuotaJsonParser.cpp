@@ -339,15 +339,24 @@ CodexAppServerMessage CodexQuotaJsonParser::ParseLine(
         }
 
         const int requestId = id->get<int>();
+        parsed.requestId = requestId;
+
+        const bool knownRequest =
+            requestId == INITIALIZE_REQUEST_ID ||
+            requestId == ACCOUNT_REQUEST_ID ||
+            requestId == RATE_LIMITS_REQUEST_ID;
+
+        // App Server can send its own requests and responses for features this
+        // small client does not use. They must not tear down the quota session.
+        if (!knownRequest)
+        {
+            return parsed;
+        }
+
         if (message.contains("error"))
         {
-            if (requestId == INITIALIZE_REQUEST_ID ||
-                requestId == ACCOUNT_REQUEST_ID ||
-                requestId == RATE_LIMITS_REQUEST_ID)
-            {
-                parsed.type = CodexAppServerMessageType::Error;
-                parsed.error = ExtractError(message);
-            }
+            parsed.type = CodexAppServerMessageType::Error;
+            parsed.error = ExtractError(message);
             return parsed;
         }
 

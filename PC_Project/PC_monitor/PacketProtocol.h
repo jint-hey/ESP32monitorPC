@@ -150,7 +150,8 @@ The fixed payload size is 27 bytes. All multi-byte fields are little endian.
     1         1 byte      Status: 0 unavailable, 1 valid,
                          2 ChatGPT login required, 3 collector error
     2         1 byte      Flags: bit0 weekly quota valid,
-                         bit1 rate limit reached
+                         bit1 rate limit reached,
+                         bit2 last-known/stale value
     3         8 bytes     Collection time, Unix seconds
     11        2 bytes     Used percentage x 100
     13        2 bytes     Remaining percentage x 100

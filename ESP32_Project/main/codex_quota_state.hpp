@@ -28,6 +28,7 @@ struct CodexQuotaSnapshot
 {
     CodexQuotaStatus status = CodexQuotaStatus::Unavailable;
     bool rateLimitReached = false;
+    bool stale = false;
     uint64_t collectedAtUnixSeconds = 0;
     CodexQuotaWindow quota;
     uint32_t updateCount = 0;

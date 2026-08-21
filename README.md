@@ -4,8 +4,8 @@
 
 本项目由 Windows PC 上位机和 ESP32-S3 OLED 显示端组成：
 
-- `PC_Project`：采集 CPU、内存、GPU 名称与使用率，并通过 Codex App Server 查询 ChatGPT Codex 周额度；程序以 Windows 托盘应用运行，将数据打包后通过串口发送。
-- `ESP32_Project`：使用 ESP-IDF 5.3.x 和 C++，通过 UART0 接收串口字节流，完成帧同步、CRC 校验和 payload 解包，在 0.96 英寸 SSD1306 128×64 OLED 上轮流显示硬件状态和 Codex 周额度。
+- `PC_Project`：采集 CPU、内存、GPU 名称与使用率，并通过 Codex App Server 查询 ChatGPT Codex 周额度；程序以 Windows 托盘应用运行，将数据打包后通过串口发送。额度查询支持快速重试、最后有效值缓存和临时故障降级显示。
+- `ESP32_Project`：使用 ESP-IDF 5.3.x 和 C++，通过 UART0 接收串口字节流，完成帧同步、CRC 校验和 payload 解包，在 0.96 英寸 SSD1306 128×64 OLED 上轮流显示硬件状态、Codex 周额度和路由器目标设备状态。
 
 PC 和 ESP32 共用同一套二进制串口协议。协议帧版本当前为 `0x01`，Codex payload schema 当前为 `2`，不兼容旧版 Codex schema `1`。
 
@@ -32,6 +32,8 @@ PC_Project/x64/Debug/PC_monitor.exe
 3. 右键托盘图标，将鼠标移到“串口选择”，选择 ESP32 对应的 COM 端口（如果存在多个，可以挨个试）。
 4. 不再使用时，通过托盘菜单的“退出”关闭程序并释放串口。
 
+运行期间如果 ESP32 复位或 USB 串口短暂消失，PC 程序会每2秒尝试重新打开上次选择的端口；重连后自动补发硬件信息和最新 Codex 快照。
+
 Release 用于日常运行；Debug 会额外打开日志终端。Codex CLI 不可用或未登录时，CPU、内存和 GPU 监控仍能继续工作。
 
 ### 使用 Flash Download Tool 烧录 ESP32 固件
@@ -43,13 +45,14 @@ Release 用于日常运行；Debug 会额外打开日志终端。Codex CLI 不�
 | `0x0` | `ESP32_Project/build/bootloader/bootloader.bin` |
 | `0x8000` | `ESP32_Project/build/partition_table/partition-table.bin` |
 | `0x10000` | `ESP32_Project/build/pc_hardware_display.bin` |
+| `0x310000` | `ESP32_Project/build/storage.bin`，由 `spiffs/config.properties` 生成 |
 
 烧录步骤：
 
 1. 从[乐鑫官方工具页面](https://www.espressif.com/en/tools-type/flash-download-tools)下载并启动 Flash Download Tool。
 2. 启动界面选择 `ChipType: ESP32-S3`、`WorkMode: Develop`、`LoadMode: UART`。
-3. 在下载列表添加上表三个 `.bin` 文件，勾选每一行并填写对应地址。
-4. 选择 `SPI SPEED: 80MHz`、`SPI MODE: DIO`、`FLASH SIZE: 2MB`。
+3. 在下载列表添加上表四个 `.bin` 文件，勾选每一行并填写对应地址。`storage.bin` 含本机 Wi-Fi、路由器和 PushPlus 配置，已被 Git 忽略；缺少时需先执行一次 `idf.py build`。
+4. 选择 `SPI SPEED: 80MHz`、`SPI MODE: DIO`、`FLASH SIZE: 8MB`。
 5. 先退出占用串口的 `PC_monitor.exe` 和 `idf.py monitor`，再选择 ESP32 对应的 COM 端口和下载波特率。
 6. 点击 `START`。如果无法自动进入下载模式，按住开发板 `BOOT`，短按 `RESET`，松开 `RESET` 后再松开 `BOOT`，然后重新开始。
 7. 下载完成后复位开发板，再启动 PC 上位机并选择该串口。
@@ -89,7 +92,8 @@ Release 用于日常运行；Debug 会额外打开日志终端。Codex CLI 不�
       ├─ codex_quota_state.*            Codex v2 payload 解包
       ├─ unix_time.hpp                  Unix 时间到本地日期的转换
       ├─ oled_display.*                 SSD1306 I2C 驱动和 framebuffer
-      └─ oled_ui.*                      硬件/Codex 页面绘制与定时切换
+      ├─ oled_ui.*                      硬件/Codex/路由页面绘制与定时切换
+      └─ ../components/router_monitor/  Wi-Fi、TP-Link 查询、PushPlus 和 NVS
 ```
 
 ## PC 工程
@@ -99,7 +103,7 @@ Release 用于日常运行；Debug 会额外打开日志终端。Codex CLI 不�
 PC 程序是 Windows GUI 托盘程序：
 
 - 启动后在 Win11 通知区域显示图标。
-- 右键图标可以选择当前串口或退出程序。
+- 右键图标可以选择当前串口或退出程序；串口异常断开后每2秒自动重连。
 - Debug 配置自动创建日志终端；Release 配置不创建控制台窗口。
 - 硬件采集、Codex 查询和串口发送使用独立线程，某一数据源失败不会阻塞其他数据源。
 
@@ -112,7 +116,7 @@ PC 端使用 Win32 消息循环作为主线程，并将阻塞操作和周期任�
 | 主线程 | 程序启动 | Win32 消息循环、托盘菜单、串口选择、状态通知和退出流程 |
 | `HardwareMonitor` | 程序启动 | 默认每1秒采集 CPU、内存和 GPU，更新线程安全硬件快照 |
 | `ConsoleLogger` 硬件日志线程 | 仅 Debug 日志开启时 | 默认每1秒复制硬件快照并打印，不参与采集和串口发送 |
-| `CodexQuotaMonitor` | 程序启动 | 管理隐藏的 `codex app-server` 子进程、JSONL 收发、60秒查询及异常退避重启 |
+| `CodexQuotaMonitor` | 程序启动 | 管理隐藏的 `codex app-server`、JSONL 收发、10秒响应超时、2/5/10秒快速请求重试、60秒正常刷新和异常退避重启 |
 | `CodexQuotaSerialSender` | 程序启动 | 监听额度快照序号，额度变化或串口重连时异步发送 `0x03` 数据包 |
 | `HardwareSerialSender` | 串口连接成功 | 每秒发送 `HardwareUsage`，连接后及每10秒发送 `HardwareInfo` |
 | `SerialCommunicator::TxWorker` | 串口连接成功 | 从有界发送队列取帧并执行串口写入 |
@@ -149,7 +153,7 @@ codex app-server --listen stdio://
 CodexQuotaJsonParser
         │ 选择 limitId=codex 的最长有效窗口
         ▼
-CodexQuotaMonitor 线程安全快照
+CodexQuotaMonitor 线程安全快照 ←→ LocalAppData 最近有效值缓存
         │
         ▼
 CodexQuotaPacketEncoder (schema v2)
@@ -159,6 +163,10 @@ CodexQuotaSerialSender → SerialCommunicator
 ```
 
 Codex 查询使用官方 `account/rateLimits/read`：优先读取 `rateLimitsByLimitId` 中的 `codex` bucket，没有该视图时回退到 `rateLimits`。在 `primary` 和 `secondary` 中选择持续分钟数最长的有效窗口作为周额度。启动并认证后立即查询，每60秒主动刷新，同时响应 `account/rateLimits/updated` 通知。
+
+`account/read` 和 `account/rateLimits/read` 等待10秒仍无响应时，不会等到下一个60秒周期，而是按2秒、5秒、10秒快速重试。未知通知和未知请求 ID 会安全忽略；只有初始化、管道或进程级故障才重启 App Server。连续三次采集失败后才发布 `CollectorError`。
+
+每次成功查询都会将不含 Token 的最近有效额度写入 `%LOCALAPPDATA%\PC Hardware Monitor\codex_quota_cache.json`，缓存最长接受14天。启动或临时采集失败时继续发送最后有效额度，并设置 `STALE` 标志；新查询成功后自动恢复为实时状态。ChatGPT 登录失效不会使用旧额度掩盖，OLED 会直接显示 `LOGIN REQUIRED`。
 
 程序不会抓取网页、浏览器 Cookie 或保存 ChatGPT Token。Codex App Server 接口说明见 [OpenAI Codex App Server 文档](https://developers.openai.com/codex/app-server)。
 
@@ -173,7 +181,7 @@ Codex 查询使用官方 `account/rateLimits/read`：优先读取 `rateLimitsByL
 | UART | UART0，115200，8-N-1，无流控 |
 | UART TX/RX | GPIO43 / GPIO44，使用开发板 Type-C 串口 |
 | OLED | SSD1306，128×64，I2C地址 `0x3C` |
-| OLED SDA/SCL | GPIO13 / GPIO14 |
+| OLED SDA/SCL | GPIO12 / GPIO13 |
 | I2C频率 | 400 kHz |
 | 页面切换 | 5秒 |
 | Codex时区 | UTC+8，即 `480` 分钟 |
@@ -182,12 +190,13 @@ UART0 同时连接 PC 二进制协议，因此正常运行时不要开启 `idf.p
 
 ### ESP32 FreeRTOS 任务架构
 
-`app_main` 初始化状态仓库和 OLED 后创建两个长期运行的 FreeRTOS 任务，本身不承担循环处理：
+`app_main` 初始化状态仓库和 OLED 后创建三个长期运行的 FreeRTOS 任务，本身不承担循环处理：
 
 | 任务 | 栈大小 | 优先级 | 周期/等待 | 主要职责 |
 |---|---:|---:|---|---|
 | `pc_uart_rx` | 4096 bytes | 10 | UART 最多阻塞20ms | 每次最多读取256字节，写入2048字节环形缓冲区，解析完整帧、更新状态，并回复 Pong |
 | `oled_ui` | 4096 bytes | 5 | 100ms | 复制最新硬件/Codex 快照、绘制 SSD1306 framebuffer、刷新 OLED，并按配置切换页面 |
+| `router_monitor` | 16384 bytes | 3 | 配置周期，默认60秒 | 连接 Wi-Fi、查询 TP-Link 在线设备、更新路由页并发送 PushPlus 状态通知 |
 
 UART 接收任务的优先级高于 OLED 任务，屏幕刷新不会阻塞串口字节流接收。`HardwareStateStore` 和 `CodexQuotaStateStore` 使用 FreeRTOS mutex 保护共享快照：UART 任务只在更新快照时短暂持锁，OLED 任务复制完成后再进行格式化和 I2C 绘制，从而缩短临界区并避免显示到半包数据。
 
@@ -211,7 +220,7 @@ pc_protocol::Parser
                   OledUi（每100ms刷新）
 ```
 
-OLED 硬件页和 Codex 页每5秒轮换。GPU 标签固定，详细名称在限定区域内横向滚动。Codex 页显示周额度剩余百分比、已用百分比、剩余额度进度条、窗口长度及 UTC+8 重置日期。
+OLED 硬件页、Codex 页和路由设备页每5秒轮换。GPU 标签固定，详细名称在限定区域内横向滚动。Codex 页显示周额度剩余百分比、已用百分比、剩余额度进度条、窗口长度及 UTC+8 重置日期；使用缓存或临时采集失败时继续显示最后有效值，并在标题中标记 `STALE`。
 
 ## 串口通用数据帧
 
@@ -343,7 +352,7 @@ Codex payload 固定27字节。这里的 schema version 与通用帧头中的 Ve
 |---:|---:|---|---|
 | 0 | 1 | SchemaVersion | 固定为 `2`；其他版本直接忽略 |
 | 1 | 1 | Status | `0=Unavailable`，`1=Valid`，`2=AuthRequired`，`3=CollectorError` |
-| 2 | 1 | Flags | bit0=额度有效，bit1=已达到额度限制，其余位保留 |
+| 2 | 1 | Flags | bit0=额度有效，bit1=已达到额度限制，bit2=最后有效值/数据暂时过期，其余位保留 |
 | 3 | 8 | CollectedAt | PC采集时间，Unix秒，小端 `uint64` |
 | 11 | 2 | UsedPercentX100 | 已用百分比×100 |
 | 13 | 2 | RemainingPercentX100 | 剩余百分比×100 |

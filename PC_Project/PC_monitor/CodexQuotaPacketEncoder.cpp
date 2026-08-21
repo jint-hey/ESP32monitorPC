@@ -21,6 +21,10 @@ std::vector<std::uint8_t> CodexQuotaPacketEncoder::BuildPayload(
     {
         flags |= 0x02;
     }
+    if (snapshot.stale)
+    {
+        flags |= 0x04;
+    }
     payload[2] = flags;
 
     WriteUInt64Le(payload, 3, snapshot.collectedAtUnixSeconds);

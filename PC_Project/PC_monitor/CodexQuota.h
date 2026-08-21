@@ -25,6 +25,9 @@ struct CodexQuotaSnapshot
 {
     CodexQuotaStatus status = CodexQuotaStatus::Unavailable;
     bool rateLimitReached = false;
+    // A stale snapshot contains the last successfully collected quota while
+    // the collector is starting, retrying, or temporarily unavailable.
+    bool stale = false;
     std::uint64_t collectedAtUnixSeconds = 0;
     CodexQuotaWindow quota;
     std::string bucketId;

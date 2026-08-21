@@ -66,6 +66,7 @@ bool CodexQuotaStateStore::ApplyPacket(const pc_protocol::Packet& packet)
     CodexQuotaSnapshot next;
     next.status = static_cast<CodexQuotaStatus>(packet.payload[1]);
     next.rateLimitReached = (flags & 0x02U) != 0;
+    next.stale = (flags & 0x04U) != 0;
     next.collectedAtUnixSeconds = ReadUInt64Le(packet.payload.data() + 3);
     next.quota.valid = (flags & 0x01U) != 0;
     if (next.quota.valid)

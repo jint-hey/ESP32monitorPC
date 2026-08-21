@@ -44,6 +44,8 @@ private:
     static constexpr UINT CODEX_STATUS_MESSAGE = WM_APP + 2;
     static constexpr UINT MENU_EXIT_ID = 100;
     static constexpr UINT MENU_PORT_BASE_ID = 1000;
+    static constexpr UINT_PTR SERIAL_RECONNECT_TIMER_ID = 1;
+    static constexpr UINT SERIAL_RECONNECT_INTERVAL_MS = 2000;
     static constexpr DWORD SERIAL_BAUD_RATE = 115200;
 
     static constexpr const wchar_t* WINDOW_CLASS_NAME =
@@ -61,6 +63,7 @@ private:
     bool codexAuthNotificationShown_ = false;
 
     std::wstring currentPort_;
+    std::wstring desiredPort_;
 
     ConsoleLogger logger_;
     HardwareMonitor monitor_;
@@ -101,6 +104,7 @@ private:
 
     void ConfigureCommunication();
     void TryAutomaticConnection();
+    void HandleSerialReconnect();
     bool SelectPort(const std::wstring& portName);
     bool OpenPort(const std::wstring& portName);
     void DisconnectPort();

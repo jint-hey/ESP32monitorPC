@@ -48,18 +48,29 @@ private:
         std::string& lineBuffer,
         bool& initialized,
         bool& authenticated,
-        bool& receivedQuota
+        bool& receivedQuota,
+        bool& accountResponseReceived,
+        bool& quotaResponseReceived,
+        bool& accountRequestFailed,
+        bool& quotaRequestFailed
     );
     void DrainErrorOutput(std::string& errorBuffer);
     bool HandleJsonLine(
         const std::string& line,
         bool& initialized,
         bool& authenticated,
-        bool& receivedQuota
+        bool& receivedQuota,
+        bool& accountResponseReceived,
+        bool& quotaResponseReceived,
+        bool& accountRequestFailed,
+        bool& quotaRequestFailed
     );
 
     void PublishSnapshot(CodexQuotaSnapshot snapshot);
-    void PublishStatus(CodexQuotaStatus status);
+    void PublishStatus(CodexQuotaStatus status, bool preserveQuota = false);
+    void ReportCollectorFailure();
+    void LoadCachedSnapshot();
+    void SaveCachedSnapshot(const CodexQuotaSnapshot& snapshot) const;
     void LogInfo(const std::wstring& message) const;
     void LogWarning(const std::wstring& message) const;
     void LogError(const std::wstring& message) const;
@@ -72,6 +83,7 @@ private:
     CodexQuotaSnapshot snapshot_;
     std::uint64_t nextSequence_ = 0;
     bool hasPublishedStatus_ = false;
+    std::uint32_t consecutiveCollectorFailures_ = 0;
 
     mutable std::mutex callbackMutex_;
     StatusCallback statusCallback_;

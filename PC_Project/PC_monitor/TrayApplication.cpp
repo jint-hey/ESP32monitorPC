@@ -165,6 +165,17 @@ int TrayApplication::Run(
 
     TryAutomaticConnection();
 
+    if (SetTimer(
+            window_,
+            SERIAL_RECONNECT_TIMER_ID,
+            SERIAL_RECONNECT_INTERVAL_MS,
+            nullptr) == 0)
+    {
+        logger_.Warning(
+            L"Serial reconnect timer could not be started."
+        );
+    }
+
     logger_.Info(
         L"Tray application started."
     );
@@ -336,6 +347,14 @@ LRESULT TrayApplication::HandleWindowMessage(
             static_cast<CodexQuotaStatus>(wParam)
         );
         return 0;
+
+    case WM_TIMER:
+        if (wParam == SERIAL_RECONNECT_TIMER_ID)
+        {
+            HandleSerialReconnect();
+            return 0;
+        }
+        break;
 
     case WM_ENDSESSION:
         if (wParam != FALSE)
@@ -702,6 +721,51 @@ void TrayApplication::TryAutomaticConnection()
     SelectPort(preferredPort);
 }
 
+void TrayApplication::HandleSerialReconnect()
+{
+    if (serial_.IsRunning())
+    {
+        return;
+    }
+
+    std::wstring portName = desiredPort_;
+    if (portName.empty())
+    {
+        const std::vector<std::wstring> ports =
+            SerialPortEnumerator::Enumerate();
+        if (ports.empty())
+        {
+            return;
+        }
+
+        portName = ports.front();
+        for (const auto& port : ports)
+        {
+            if (port == L"COM4")
+            {
+                portName = port;
+                break;
+            }
+        }
+        desiredPort_ = portName;
+    }
+
+    // A failed worker leaves the sender alive but idle. Fully close the old
+    // session before reopening so HardwareInfo and Codex are both resent.
+    serialSender_.Stop();
+    serial_.Close();
+    currentPort_.clear();
+
+    if (OpenPort(portName))
+    {
+        ShowNotification(
+            APPLICATION_NAME,
+            L"串口已自动重新连接 " + portName,
+            NIIF_INFO
+        );
+    }
+}
+
 bool TrayApplication::SelectPort(
     const std::wstring& portName
 )
@@ -710,6 +774,8 @@ bool TrayApplication::SelectPort(
     {
         return false;
     }
+
+    desiredPort_ = portName;
 
     if (portName == currentPort_ &&
         serial_.IsRunning())
@@ -743,6 +809,7 @@ bool TrayApplication::SelectPort(
     if (hadPreviousConnection &&
         OpenPort(previousPort))
     {
+        desiredPort_ = previousPort;
         failureMessage +=
             L"\uff0c\u5df2\u6062\u590d " + previousPort;
     }
@@ -808,6 +875,11 @@ void TrayApplication::Shutdown()
 
     shutdownComplete_ = true;
 
+    if (window_ != nullptr)
+    {
+        KillTimer(window_, SERIAL_RECONNECT_TIMER_ID);
+    }
+
     logger_.Info(
         L"Tray application is shutting down."
     );
@@ -822,5 +894,6 @@ void TrayApplication::Shutdown()
     monitor_.Stop();
 
     currentPort_.clear();
+    desiredPort_.clear();
     RemoveTrayIcon();
 }

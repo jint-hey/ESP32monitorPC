@@ -19,6 +19,7 @@ enum class CodexAppServerMessageType
 struct CodexAppServerMessage
 {
     CodexAppServerMessageType type = CodexAppServerMessageType::Ignored;
+    int requestId = -1;
     CodexQuotaSnapshot quota;
     bool quotaPresent = false;
     bool rateLimitReachedPresent = false;

@@ -2,13 +2,8 @@
 PC_monitor/x64
 PC_monitor/PC_monitor/
 PC_monitor/PC_monitor_build/
-PC_monitor/tests/CodexQuo.*/
-PC_monitor/tests/CodexQuotaTests/
-PC_monitor/tests/x64/
-PC_monitor.slnx
-PC_monitor/PC_monitor.vcxproj
-PC_monitor/PC_monitor.vcxproj.filters
-PC_monitor/PC_monitor.vcxproj.user
+PC_monitor/tests
+PC_monitor/third_party
 x64/Debug/PC_monitor.pdb
 x64/Release/PC_monitor.pdb
 PC_Project/PC_monitor/tests

@@ -150,7 +150,14 @@ void OledUi::DrawRouterTextRow(const int y,
 
 void OledUi::DrawCodexPage(const CodexQuotaSnapshot& snapshot)
 {
-    display_.DrawText(28, 0, "CODEX WEEKLY");
+    if (snapshot.stale && snapshot.quota.valid)
+    {
+        display_.DrawText(10, 0, "CODEX WEEKLY STALE");
+    }
+    else
+    {
+        display_.DrawText(28, 0, "CODEX WEEKLY");
+    }
 
     if (!snapshot.hasPacket)
     {
@@ -159,13 +166,19 @@ void OledUi::DrawCodexPage(const CodexQuotaSnapshot& snapshot)
         return;
     }
 
-    if (snapshot.status != CodexQuotaStatus::Valid)
+    // Authentication failures require user action and must not be hidden by
+    // an older cached value. Transient collector failures may keep rendering
+    // a valid last-known quota with the STALE marker above.
+    if (snapshot.status == CodexQuotaStatus::AuthRequired)
+    {
+        display_.DrawText(22, 24, "LOGIN REQUIRED");
+        return;
+    }
+
+    if (!snapshot.quota.valid)
     {
         switch (snapshot.status)
         {
-        case CodexQuotaStatus::AuthRequired:
-            display_.DrawText(22, 24, "LOGIN REQUIRED");
-            break;
         case CodexQuotaStatus::CollectorError:
             display_.DrawText(13, 24, "COLLECTOR ERROR");
             break;
@@ -174,12 +187,6 @@ void OledUi::DrawCodexPage(const CodexQuotaSnapshot& snapshot)
             display_.DrawText(25, 24, "UNAVAILABLE");
             break;
         }
-        return;
-    }
-
-    if (!snapshot.quota.valid)
-    {
-        display_.DrawText(22, 24, "QUOTA MISSING");
         return;
     }
 
