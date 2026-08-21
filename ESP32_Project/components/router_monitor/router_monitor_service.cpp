@@ -111,14 +111,19 @@ void RouterMonitorService::TaskEntry(void* context) {
 }
 
 void RouterMonitorService::Run() {
-    if (!InitializeNvs()) return;
+    if (!InitializeNvs()) {
+        status_store_.UpdateError("NVS INIT FAILED");
+        return;
+    }
     std::string error;
     if (!mount_config_filesystem(error)) {
+        status_store_.UpdateError("SPIFFS MOUNT FAILED");
         ESP_LOGE(TAG, "%s", error.c_str());
         return;
     }
     Config config;
     if (!load_config(CONFIG_PATH, config, error)) {
+        status_store_.UpdateError("CONFIG INVALID");
         ESP_LOGE(TAG, "Configuration error: %s", error.c_str());
         return;
     }
@@ -131,7 +136,11 @@ void RouterMonitorService::Run() {
 
     WifiManager wifi;
     if (!wifi.start(config, 60)) {
-        if (!wifi.initialized()) return;
+        if (!wifi.initialized()) {
+            status_store_.UpdateError("WIFI INIT FAILED", config.target_value);
+            return;
+        }
+        status_store_.UpdateError("WAITING FOR WIFI", config.target_value);
         while (!wifi.wait_connected(30)) vTaskDelay(pdMS_TO_TICKS(1000));
     }
     SynchronizeTime(config.timezone);
@@ -156,7 +165,7 @@ void RouterMonitorService::Run() {
         if (!wifi.wait_connected(config.request_timeout_seconds)) {
             current.status = Status::error;
             current.checked_at = std::time(nullptr);
-            current.detail = "Wi-Fi 未连接";
+            current.detail = "WI-FI DISCONNECTED";
         } else {
             current = CheckOnce(config, router);
         }

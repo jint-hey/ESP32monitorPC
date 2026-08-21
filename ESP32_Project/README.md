@@ -4,8 +4,10 @@
 
 ## 硬件连接
 
-- UART：UART0，115200、8-N-1，TX=GPIO43，RX=GPIO44；使用开发板连接 Type-C 的串口通道。
-- OLED：SSD1306 128x64，I2C1，地址 `0x3C`，SDA=GPIO6，SCL=GPIO7，时钟 400 kHz。
+- 烧录端口：COM6，仅用于 ESP-IDF 固件和 SPIFFS 配置分区烧录。
+- PC 通信端口：COM4，由上位机用于电脑性能与 Codex 额度数据的双向二进制通信。
+- UART：COM4 对应 UART0，115200、8-N-1，TX=GPIO43，RX=GPIO44。
+- OLED：SSD1306 128x64，I2C1，地址 `0x3C`，SDA=GPIO12，SCL=GPIO13，时钟 400 kHz。
 
 引脚和串口参数集中在 `main/app_config.hpp`，如果实际开发板接线不同，只需修改该文件。
 
@@ -29,11 +31,11 @@
 cd ESP32_Project
 idf.py set-target esp32s3
 idf.py build
-idf.py -p COM4 flash
+idf.py -p COM6 flash
 ```
 
 `flash` 会同时写入原 PC 监控固件和 SPIFFS 配置分区。路由状态保存在 NVS 中。当前硬件配置按 8 MB Quad Flash + 8 MB Octal PSRAM 设置。
 
-OLED 每隔 `main/app_config.hpp` 中的 `OLED_PAGE_SWITCH_SECONDS` 切换页面。新增路由页显示检测状态、目标、匹配设备名称、IP 和 MAC；PC 上位机断开时该页仍会继续显示。
+OLED 每隔 `main/app_config.hpp` 中的 `OLED_PAGE_SWITCH_SECONDS` 切换页面。新增路由页显示检测状态、目标、匹配设备名称、IP 和 MAC；PC 上位机断开时该页仍会继续显示。NVS、SPIFFS、配置、Wi-Fi 或路由请求失败时，错误状态会直接显示在该页面。
 
-工程默认关闭 ESP-IDF 控制台日志，避免日志文本混入 UART0 的二进制协议。烧录时先退出占用该串口的 PC 上位机；运行上位机时也应先关闭 `idf.py monitor`。Boot ROM 在复位时输出的启动文字不会影响接收器，协议解析器会自动重新同步到 `AA 55` 帧头。
+工程默认关闭 ESP-IDF 控制台日志。Wi-Fi 路由检测不向 COM4 或 COM6 输出运行日志，不会污染 COM4 上的 UART0 二进制协议；其运行结果以 OLED 界面和 PushPlus 通知为准。烧录使用 COM6，固件运行后由 PC 上位机独占 COM4，无需运行 `idf.py monitor`。

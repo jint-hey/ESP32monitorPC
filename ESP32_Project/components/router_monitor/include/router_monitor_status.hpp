@@ -8,6 +8,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 
 namespace router_monitor {
 
@@ -32,6 +33,7 @@ public:
     RouterMonitorStatusStore& operator=(const RouterMonitorStatusStore&) = delete;
 
     void Update(const Config& config, const CheckResult& result);
+    void UpdateError(const std::string& detail, const std::string& target = {});
     RouterMonitorSnapshot Copy() const;
 
 private:

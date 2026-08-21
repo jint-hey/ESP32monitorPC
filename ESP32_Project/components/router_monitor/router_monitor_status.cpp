@@ -55,6 +55,20 @@ void RouterMonitorStatusStore::Update(const Config& config, const CheckResult& r
     xSemaphoreGive(mutex_);
 }
 
+void RouterMonitorStatusStore::UpdateError(const std::string& detail,
+                                           const std::string& target) {
+    RouterMonitorSnapshot next;
+    next.status = Status::error;
+    next.has_result = true;
+    CopyText(next.target, target);
+    CopyText(next.device_name, detail);
+
+    xSemaphoreTake(mutex_, portMAX_DELAY);
+    next.update_count = state_.update_count + 1U;
+    state_ = next;
+    xSemaphoreGive(mutex_);
+}
+
 RouterMonitorSnapshot RouterMonitorStatusStore::Copy() const {
     RouterMonitorSnapshot snapshot;
     xSemaphoreTake(mutex_, portMAX_DELAY);
