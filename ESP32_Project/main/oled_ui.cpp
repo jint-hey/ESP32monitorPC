@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include "app_config.hpp"
+#include "core.hpp"
 #include "esp_timer.h"
 #include "unix_time.hpp"
 
