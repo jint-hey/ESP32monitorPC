@@ -6,3 +6,6 @@ set(IDF_TARGET "esp32s3" CACHE STRING "ESP-IDF target")
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(pc_hardware_display)
+
+# Build and flash the router monitor's external configuration with the app.
+spiffs_create_partition_image(storage spiffs FLASH_IN_PROJECT)

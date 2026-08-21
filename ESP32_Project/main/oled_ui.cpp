@@ -45,11 +45,13 @@ void FormatWindowDuration(const uint32_t minutes, char* output, const std::size_
 OledUi::OledUi(OledDisplay& display,
                HardwareStateStore& hardwareState,
                CodexQuotaStateStore& codexQuotaState,
-               PcConnectionStateStore& connectionState)
+               PcConnectionStateStore& connectionState,
+               router_monitor::RouterMonitorStatusStore& routerMonitorState)
     : display_(display),
       hardwareState_(hardwareState),
       codexQuotaState_(codexQuotaState),
-      connectionState_(connectionState)
+      connectionState_(connectionState),
+      routerMonitorState_(routerMonitorState)
 {}
 
 esp_err_t OledUi::Start()
@@ -87,12 +89,17 @@ void OledUi::TaskLoop()
         display_.Clear();
 
         const HardwareSnapshot hardwareSnapshot = hardwareState_.Copy();
+        const uint64_t page = (nowMs / PAGE_SWITCH_PERIOD_MS) % 3U;
 
-        if (!connectionState_.IsConnected() || !hardwareSnapshot.hasUsage)
+        if (page == 2U)
+        {
+            DrawRouterMonitorPage(routerMonitorState_.Copy(), nowMs);
+        }
+        else if (!connectionState_.IsConnected() || !hardwareSnapshot.hasUsage)
         {
             DrawWaitingScreen();
         }
-        else if ((nowMs / PAGE_SWITCH_PERIOD_MS) % 2U == 0U)
+        else if (page == 0U)
         {
             DrawDashboard(hardwareSnapshot, nowMs);
         }
@@ -104,6 +111,40 @@ void OledUi::TaskLoop()
         display_.Refresh();
         vTaskDelay(UI_REFRESH_PERIOD);
     }
+}
+
+void OledUi::DrawRouterMonitorPage(
+    const router_monitor::RouterMonitorSnapshot& snapshot,
+    const uint64_t nowMs)
+{
+    display_.DrawText(0, 0, "ROUTER DEVICE");
+    if (!snapshot.has_result)
+    {
+        display_.DrawText(16, 24, "CHECK PENDING");
+        return;
+    }
+
+    display_.DrawText(0, 11, "ST");
+    display_.DrawText(30, 11, router_monitor::status_name(snapshot.status));
+    DrawRouterTextRow(22, "TGT", snapshot.target.data(), nowMs, 0);
+    DrawRouterTextRow(33, "NAME", snapshot.device_name.data(), nowMs, 1);
+    DrawRouterTextRow(44, "IP", snapshot.ip.data(), nowMs, 2);
+    DrawRouterTextRow(55, "MAC", snapshot.mac.data(), nowMs, 3);
+}
+
+void OledUi::DrawRouterTextRow(const int y,
+                               const std::string_view label,
+                               const char* value,
+                               const uint64_t nowMs,
+                               const std::size_t rowIndex)
+{
+    constexpr int valueX = 30;
+    constexpr int valueWidth = OledDisplay::WIDTH - valueX;
+    display_.DrawText(0, y, label);
+    std::string displayValue = ToDisplayText(value);
+    if (displayValue.empty()) displayValue = "-";
+    const int offset = ScrollOffset(displayValue.size(), valueWidth, nowMs, rowIndex);
+    display_.DrawTextClipped(valueX - offset, y, displayValue, valueX, valueWidth);
 }
 
 void OledUi::DrawCodexPage(const CodexQuotaSnapshot& snapshot)
